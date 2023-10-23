@@ -11,8 +11,8 @@
     void debug_display_array(double** arr, uint16_t size);
 
     typedef struct {
-        pthread_mutex_t*    lock;
         uint16_t            thread_num;
+        pthread_mutex_t*    lock;
         double**            old_arr;
         double**            new_arr;
         double              diff;

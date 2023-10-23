@@ -23,16 +23,47 @@ int main (int argc, char *argv[]) {
 
     uint16_t thread_lim = (DEBUG_SIZE < DEBUG_NUM_THREADS) ?
                             DEBUG_SIZE : DEBUG_NUM_THREADS;
-    uint16_t rows_per_thread = ceil((double)DEBUG_SIZE/DEBUG_NUM_THREADS);
 
-    printf("thread_lim: %d | rows_per_thread: %d\n ", thread_lim, rows_per_thread);
+    uint16_t threads_l = DEBUG_SIZE % DEBUG_NUM_THREADS;
+    uint16_t threads_s = DEBUG_NUM_THREADS - threads_l;
+    double rows_per_thread = (double)DEBUG_SIZE/DEBUG_NUM_THREADS;
+    uint16_t rows_per_thread_l = (uint16_t)ceil(rows_per_thread);
+    uint16_t rows_per_thread_s = (uint16_t)floor(rows_per_thread);
+    
+    thread_args thrd_args[thread_lim];
+    pthread_t   thrds[thread_lim];
+
+    printf("thread_lim: %d | rows_per_thread: %f\nthreads_l: %d | rows_per_thread_l: %d\nthreads_s: %d | rows_per_thread_s: %d\n ", thread_lim, rows_per_thread, threads_l, rows_per_thread_l, threads_s, rows_per_thread_s);
 
     double** old_arr = malloc_double_array(DEBUG_SIZE);
     double** new_arr = malloc_double_array(DEBUG_SIZE);
 
     old_arr = debug_populate_array(old_arr, DEBUG_SIZE, '1');
 
-    for (uint16_t i=0; i<thread_lim; )
+    uint16_t str = 0;
+    uint16_t end = 0;
+    for (uint16_t i=0; i<thread_lim; i++) {
+
+        if (threads_l > 0) {
+            str = (i>0) ? end+1 : 0;
+            end = str+rows_per_thread_l-1;
+            threads_l--;
+        } else {
+            str = (i>0) ? end+1 : 0;
+            end = str+rows_per_thread_s-1;
+        }
+        printf("i: %d | str: %d | end: %d\n", i, str, end);
+        
+        
+        thrd_args[i].thread_num     = i;
+        thrd_args[i].lock           = &thread_lock;
+        thrd_args[i].old_arr        = old_arr;
+        thrd_args[i].new_arr        = new_arr;
+        thrd_args[i].diff           = 0.0;
+        thrd_args[i].thread_done    = 0;
+        thrd_args[i].start_row      = str;
+        thrd_args[i].end_row        = end;
+    }
 
     pthread_mutex_destroy(&thread_lock);
     pthread_cond_destroy(&all_threads_done);
