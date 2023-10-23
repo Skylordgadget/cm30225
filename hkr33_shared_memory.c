@@ -32,7 +32,7 @@ int main (int argc, char *argv[]) {
 
     old_arr = debug_populate_array(old_arr, DEBUG_SIZE, '1');
 
-    
+    for (uint16_t i=0; i<thread_lim; )
 
     pthread_mutex_destroy(&thread_lock);
     pthread_cond_destroy(&all_threads_done);
