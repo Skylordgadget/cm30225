@@ -1,22 +1,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <sys/time.h>
 #include <time.h>
 #include <math.h>
+#include <unistd.h>
 
-#define THREAD_LIMIT 6
-#define ROW 10
-#define COL 10
-#define PRECISION 0.0001
-#define DEBUG 1
-#define PRINT 1
+//#define _POSIX_C_SOURCE 199309L
 
-pthread_barrier_t my_barrier;
+#define THREAD_LIMIT 12
+#define ROW 1000
+#define COL 1000
+#define PRECISION 1 
+#define DEBUG 0
+#define PRINT 0
+
+struct timespec begin, end;
+double elapsed;
+
+//pthread_barrier_t my_barrier;
 pthread_cond_t all_threads_finished;
 int count = 0;
 int finished_threads=0;
 
-typedef struct {
+typedef struct a{
     int thread_id;
     double** array;
     double** t_array;
@@ -28,20 +35,22 @@ typedef struct {
     int loop;
 } threadArgs;
 
-double** initArray(double** array_name, int row_size, int col_size){
-    array_name=(double **)malloc(row_size*sizeof(double));
-    if (array_name == NULL){
+double** initArray(int row_size, int col_size) {
+    double** array_name = (double **)malloc(row_size * sizeof(double*));
+    if (array_name == NULL) {
         exit(0);
     }
-    int i;
-    for (i=0; i<row_size; i++){
-        array_name[i]=(double *)malloc(col_size*sizeof(double));
-        if (array_name[i] == NULL){
+
+    for (int i = 0; i < row_size; i++) {
+        array_name[i] = (double *)malloc(col_size * sizeof(double));
+        if (array_name[i] == NULL) {
             exit(0);
-        } 
+        }
     }
-    return(array_name);
+
+    return array_name;
 }
+
 
 void freeArray(double** array_name, int row_size){
     int i;
@@ -73,7 +82,8 @@ void* average(void* args){
         int i,j; 
         for (i=tArgs->start_row; i<tArgs->end_row; i++){
             for (j=0; j<COL; j++){
-                if (i != 0 && i != ROW-1 && j != 0 && j != COL-1){
+                if (DEBUG) { printf("thread: %d, row: %d, col %d\n", tArgs->thread_id, i, j); }
+                if (i != 0 && i < ROW-1 && j != 0 && j < COL-1){
                     tArgs->t_array[i][j]=(tArgs->array[i-1][j]+tArgs->array[i+1][j]+tArgs->array[i][j+1]+tArgs->array[i][j-1])/4;
                 }
             }
@@ -96,13 +106,15 @@ void* average(void* args){
 
         for (i=tArgs->start_row; i<tArgs->end_row; i++){
             for (j=0; j<COL; j++){
-                if (i != 0 && i != ROW-1 && j != 0 && j != COL-1){
+                if (i != 0 && i < ROW-1 && j != 0 && j < COL-1){
                     // t_array is the next iteration of the array. current - next = difference. 
                     tArgs->difference += fabs(tArgs->array[i][j] - tArgs->t_array[i][j]);
                     tArgs->array[i][j]=tArgs->t_array[i][j]; // updating the array
                 }
             }
         }
+
+        // change difference???? 
 
         // Wait for all threads to be finished before reiterating
         //if (DEBUG) { printf("Thread %d has taken the lock.\n",tArgs->thread_id); }
@@ -115,6 +127,7 @@ void* average(void* args){
             pthread_cond_wait(&all_threads_finished, tArgs->lock);
         } else {
             count = 0;  // resetting count, so that the other threads can wait again.
+            // if the difference between all items (?) is less than the precision, we re-iterate again
             if (tArgs->difference <= PRECISION) {
                 if (DEBUG) { printf("Thread %d is broadcasting and exiting.\n",tArgs->thread_id); }
                 finished_threads++;
@@ -133,7 +146,7 @@ void* average(void* args){
         if (DEBUG) { tArgs->loop++; }
     }
 
-    printf("Thread %d has exited the while loop\n",tArgs->thread_id);
+    if (DEBUG) { printf("Thread %d has exited the while loop\n",tArgs->thread_id); }
     if (DEBUG) { printf("Finished Threads: %d\n",finished_threads); }
 
 
@@ -142,15 +155,17 @@ void* average(void* args){
 
 int main(int argc, char** argv){
 
-    //srand (time(NULL));
+    clock_gettime(CLOCK_MONOTONIC, &begin);
+
+    // spawn threads to do work here
     pthread_mutex_t thread_lock = PTHREAD_MUTEX_INITIALIZER;
     pthread_cond_init(&all_threads_finished, NULL);
-    pthread_barrier_init(&my_barrier, NULL, THREAD_LIMIT);
+    //pthread_barrier_init(&my_barrier, NULL, THREAD_LIMIT);
 
     double** num_array = NULL;
     double** t_array = NULL;
-    num_array = initArray(num_array, ROW, COL);
-    t_array = initArray(t_array, ROW, COL);
+    num_array = initArray(ROW, COL);
+    t_array = initArray(ROW, COL);
 
     // fill boundary with random values
     int i,j;
@@ -168,7 +183,7 @@ int main(int argc, char** argv){
 
     // creating the threads
     int chunk = ceil((double) ROW / THREAD_LIMIT);
-    for (i=0; i<ROW; i++){
+    for (i=0; i<THREAD_LIMIT; i++){
         tArgs[i].thread_id = i;
         tArgs[i].array=num_array;
         tArgs[i].t_array=t_array;
@@ -205,5 +220,12 @@ int main(int argc, char** argv){
     freeArray(num_array, ROW);
     freeArray(t_array, ROW);
     
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+   
+
+    elapsed = end.tv_sec - begin.tv_sec;
+    elapsed += (end.tv_nsec - begin.tv_nsec) / 1000000000.0;
+    printf("Seconds %f\n", elapsed);
     return 0;
 }

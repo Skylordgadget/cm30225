@@ -5,17 +5,17 @@ include(CTest)
 enable_testing()
 
 include_directories(inc)
-set(SOURCES hkr33_shared_memory.c inc/hkr33_shared_memory.h)
+# set(SOURCES hkr33_shared_memory.c inc/hkr33_shared_memory.h)
 
 # add_executable(cwk1 wikipediea.c)
-# add_executable(cwk1 frieden.c)
-add_executable(cwk1 hkr33_shared_memory.c)
+add_executable(cwk1 frieden.c)
+# add_executable(cwk1 hkr33_shared_memory.c)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -Wall -Wextra -Wconversion")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -Wall -Wextra -Wconversion")
  
 set(THREADS_PREFER_PTHREAD_FLAG ON)
  

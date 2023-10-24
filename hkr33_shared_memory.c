@@ -6,27 +6,27 @@
 #include <math.h>
 #include <hkr33_shared_memory.h>
 
-#define VERBOSE 1
+#define DEBUG_VERBOSE 1
 
 #define DEBUG 1
-#define DEBUG_NUM_THREADS 44
+#define DEBUG_NUM_THREADS 50
 #define DEBUG_PRECISION 0.0001
 #define DEBUG_SIZE 100
+#define DEBUG_SIZE_MUTABLE (DEBUG_SIZE - 2)
 
-pthread_cond_t all_threads_done;
+pthread_barrier_t barrier;
 
 int main (int argc, char *argv[]) {
     printf("Hello, World! \n");
 
-    pthread_mutex_t thread_lock = PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_init(&all_threads_done, NULL);
+    uint16_t thread_lim = (DEBUG_SIZE_MUTABLE < DEBUG_NUM_THREADS) ?
+                            DEBUG_SIZE_MUTABLE : DEBUG_NUM_THREADS;
+    
+    pthread_barrier_init(&barrier, NULL, thread_lim);
 
-    uint16_t thread_lim = (DEBUG_SIZE < DEBUG_NUM_THREADS) ?
-                            DEBUG_SIZE : DEBUG_NUM_THREADS;
-
-    uint16_t threads_l = DEBUG_SIZE % DEBUG_NUM_THREADS;
+    uint16_t threads_l = DEBUG_SIZE_MUTABLE % DEBUG_NUM_THREADS;
     uint16_t threads_s = DEBUG_NUM_THREADS - threads_l;
-    double rows_per_thread = (double)DEBUG_SIZE/DEBUG_NUM_THREADS;
+    double rows_per_thread = (double)DEBUG_SIZE_MUTABLE/DEBUG_NUM_THREADS;
     uint16_t rows_per_thread_l = (uint16_t)ceil(rows_per_thread);
     uint16_t rows_per_thread_s = (uint16_t)floor(rows_per_thread);
     
@@ -43,9 +43,8 @@ int main (int argc, char *argv[]) {
     uint16_t str = 0;
     uint16_t end = 0;
     for (uint16_t i=0; i<thread_lim; i++) {
-
         if (threads_l > 0) {
-            str = (i>0) ? end+1 : 0;
+            str = (i>0) ? end+1 : 1;
             end = str+rows_per_thread_l-1;
             threads_l--;
         } else {
@@ -54,19 +53,15 @@ int main (int argc, char *argv[]) {
         }
         printf("i: %d | str: %d | end: %d\n", i, str, end);
         
-        
-        thrd_args[i].thread_num     = i;
-        thrd_args[i].lock           = &thread_lock;
-        thrd_args[i].old_arr        = old_arr;
-        thrd_args[i].new_arr        = new_arr;
-        thrd_args[i].diff           = 0.0;
-        thrd_args[i].thread_done    = 0;
-        thrd_args[i].start_row      = str;
-        thrd_args[i].end_row        = end;
+        thrd_args[i].thread_num = i;
+        thrd_args[i].old_arr    = old_arr;
+        thrd_args[i].new_arr    = new_arr;
+        thrd_args[i].diff       = 0.0;
+        thrd_args[i].start_row  = str;
+        thrd_args[i].end_row    = end;
     }
 
-    pthread_mutex_destroy(&thread_lock);
-    pthread_cond_destroy(&all_threads_done);
+    pthread_barrier_destroy(&barrier);
 
     //debug_display_array(arr, DEBUG_SIZE);
     free_double_array(old_arr, DEBUG_SIZE);
@@ -102,8 +97,7 @@ double** debug_populate_array(double** arr, uint16_t size, char mode) {
                         arr[i][j] = 1.0;
                         break;
                     case 'r':
-                        // TODO expand this so that the right and bottom
-                        //      boundary are included (also make less shit)
+                        // TODO expand this so that the right and bottom boundary are included (also make less shit)
                         // cast random number between 0 and size to double
                         arr[i][j] = (double)(rand() % size);
                         break;
@@ -123,5 +117,31 @@ void debug_display_array(double** arr, uint16_t size) {
         printf("\n");
     }
     printf("\n");
+}
+
+
+void* avg(void* thrd_args) {
+    thread_args* args = (thread_args*) thrd_args;
+    bool thread_done = false;
+    while (true) {
+        for (uint16_t i=(args->start_row); i<(args->end_row); i++) {
+            for (uint16_t j=1; j<DEBUG_SIZE_MUTABLE; j++) {
+                args->new_arr[i][j] = (double)((args->old_arr[i][j-1] + args->old_arr[i][j+1] + args->old_arr[i-1][j] + args->old_arr[i+1][j])/4); 
+            }
+        }
+
+        for (uint16_t i=(args->start_row); i<(args->end_row); i++) {
+            for (uint16_t j=1; j<DEBUG_SIZE_MUTABLE; j++) {
+                args->diff += fabs(args->old_arr[i][j] - args->new_arr[i][j]);
+                args->old_arr[i][j]=args->new_arr[i][j];
+            }
+        }
+
+    }
+
+    
+
+
+
 }
 
