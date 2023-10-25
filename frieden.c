@@ -8,11 +8,11 @@
 
 //#define _POSIX_C_SOURCE 199309L
 
-#define THREAD_LIMIT 12
+#define THREAD_LIMIT 6
 #define ROW 1000
 #define COL 1000
 #define PRECISION 1 
-#define DEBUG 0
+#define DEBUG 1
 #define PRINT 0
 
 struct timespec begin, end;
