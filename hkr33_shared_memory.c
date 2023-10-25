@@ -56,11 +56,11 @@ int main (int argc, char *argv[]) {
     for (uint16_t i=0; i<thread_lim; i++) {
         if (threads_l > 0) {
             str = (i>0) ? end+1 : 1;
-            end = str+rows_per_thread_l-1;
+            end = (uint16_t)(str+rows_per_thread_l-1);
             threads_l--;
         } else {
             str = (i>0) ? end+1 : 1;
-            end = str+rows_per_thread_s-1;
+            end = (uint16_t)(str+rows_per_thread_s-1);
         }
         printf("i: %d | str: %d | end: %d\n", i, str, end);
         
@@ -230,5 +230,6 @@ void* avg(void* thrd_args) {
     }
 
     pthread_exit(NULL);
+    return 0;
 }
 
