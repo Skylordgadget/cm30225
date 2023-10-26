@@ -8,12 +8,12 @@
 
 //#define _POSIX_C_SOURCE 199309L
 
-#define THREAD_LIMIT 6
-#define ROW 1000
-#define COL 1000
-#define PRECISION 1 
-#define DEBUG 1
-#define PRINT 0
+#define THREAD_LIMIT 4
+#define ROW 8
+#define COL 8
+#define PRECISION 1e-12
+#define DEBUG 0
+#define PRINT 1
 
 struct timespec begin, end;
 double elapsed;
@@ -34,6 +34,21 @@ typedef struct a{
     double difference;
     int loop;
 } threadArgs;
+
+//double** initArray(double** array_name, int row_size, int col_size){
+//    array_name=(double **)malloc(row_size*sizeof(double));
+//    if (array_name == NULL){
+//        exit(0);
+//    }
+//    int i;
+//    for (i=0; i<row_size; i++){
+//        array_name[i]=(double *)malloc(col_size*sizeof(double));
+//        if (array_name[i] == NULL){
+//            exit(0);
+//        } 
+//    }
+//    return(array_name);
+//}
 
 double** initArray(int row_size, int col_size) {
     double** array_name = (double **)malloc(row_size * sizeof(double*));
@@ -168,12 +183,24 @@ int main(int argc, char** argv){
     t_array = initArray(ROW, COL);
 
     // fill boundary with random values
+    
     int i,j;
     for (i=0; i<ROW; i++){
         for (j=0; j<COL; j++){
-            if (i == 0 || i == ROW-1 || j == 0 || j == COL-1){ num_array[i][j] = rand()%10; t_array[i][j] = num_array[i][j]; }
+            if (i == 0 || i == ROW-1 || j == 0 || j == COL-1){ num_array[i][j] = rand()%ROW; t_array[i][j] = num_array[i][j]; }
         }
     }
+    
+    /*
+    int i,j;
+    for (i=0; i<ROW; i++){
+        for (j=0; j<COL; j++){
+            if (i == 0 || j == 0) num_array[i][j] = 1.0; 
+            else num_array[i][j] = 0.0;
+            t_array[i][j] = num_array[i][j];
+        }
+    }
+    */
 
     // initialise the structs and threads 
     threadArgs tArgs[THREAD_LIMIT];

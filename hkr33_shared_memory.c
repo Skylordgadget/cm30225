@@ -9,9 +9,9 @@
 #define DEBUG_VERBOSE 1
 
 #define DEBUG 1
-#define DEBUG_NUM_THREADS 44
-#define DEBUG_PRECISION 0.001
-#define DEBUG_SIZE 1000
+#define DEBUG_NUM_THREADS 4
+#define DEBUG_PRECISION 1e-12
+#define DEBUG_SIZE 8
 #define DEBUG_SIZE_MUTABLE (DEBUG_SIZE - 2)
 
 pthread_cond_t G_thrds_done;
@@ -45,7 +45,7 @@ int main (int argc, char *argv[]) {
     old_arr = debug_populate_array(old_arr, DEBUG_SIZE, 'r');
     new_arr = copy_array(old_arr, new_arr, DEBUG_SIZE);
     
-    //debug_display_array(old_arr, DEBUG_SIZE);
+    debug_display_array(old_arr, DEBUG_SIZE);
 
     uint16_t str = 0;  
     uint16_t end = 0;
@@ -84,7 +84,7 @@ int main (int argc, char *argv[]) {
     pthread_mutex_destroy(&thrds_complete_mlock);
     pthread_cond_destroy(&G_thrds_done);
 
-    //debug_display_array(new_arr, DEBUG_SIZE);
+    debug_display_array(new_arr, DEBUG_SIZE);
     free_double_array(old_arr, DEBUG_SIZE);
     free_double_array(new_arr, DEBUG_SIZE);
     return 0;

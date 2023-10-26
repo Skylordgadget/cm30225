@@ -5,11 +5,11 @@ include(CTest)
 enable_testing()
 
 include_directories(inc)
-set(SOURCES hkr33_shared_memory.c inc/hkr33_shared_memory.h)
+# set(SOURCES hkr33_shared_memory.c inc/hkr33_shared_memory.h)
 
 # add_executable(cwk1 wikipediea.c)
-# add_executable(cwk1 frieden.c)
-add_executable(cwk1 hkr33_shared_memory.c)
+add_executable(cwk1 frieden.c)
+# add_executable(cwk1 hkr33_shared_memory.c)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
