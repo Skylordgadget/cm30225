@@ -5,32 +5,73 @@
 #include <stdbool.h>
 #include <math.h>
 #include <hkr33_shared_memory.h>
-
-#define DEBUG_VERBOSE 1
-
-#define DEBUG 1
-#define DEBUG_NUM_THREADS 4
-#define DEBUG_PRECISION 1e-12
-#define DEBUG_SIZE 8
-#define DEBUG_SIZE_MUTABLE (DEBUG_SIZE - 2)
+#include <unistd.h>
+#include <getopt.h>
 
 pthread_cond_t G_thrds_done;
 uint16_t G_num_thrds_waiting;
 uint16_t G_num_thrds_complete;
 
-int main (int argc, char *argv[]) {
-    printf("Hello, World! \n");
+int num_threads = -1;
+int size = -1;
+double precision = -1.0;
+
+bool verbose = false;
+bool print = false;
+
+int main (int argc, char **argv) {
+    int opt;
+
+	while((opt = getopt(argc, argv, ":vps:")) != -1) 
+	{ 
+		switch(opt) 
+		{ 
+			case 'v':
+                verbose = true;
+                break;
+			case 'r':
+                print = true;
+                break; 
+			case 's': 
+				size = atoi(optarg);
+				break; 
+            case 't': 
+				num_threads = atoi(optarg); 
+				break; 
+			case ':': 
+				precision = atof(optarg);
+				break; 
+			case '?': 
+				printf("unknown option: %c\n", optopt); 
+				break; 
+            default:
+                printf("unknown error");
+                break;
+		} 
+	} 
+	
+    uint16_t size_mutable = size - 2;
+	// optind is for the extra arguments 
+	// which are not parsed 
+	for(; optind < argc; optind++){	 
+		printf("extra arguments: %s\n", argv[optind]); 
+	} 
+
+    if (num_threads == -1) {
+        printf("-t required");        
+    } else {
+
+    }
 
     pthread_mutex_t thrds_waiting_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t thrds_complete_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_cond_init(&G_thrds_done, NULL);
 
-    uint16_t thread_lim = (DEBUG_SIZE_MUTABLE < DEBUG_NUM_THREADS) ?
-                            DEBUG_SIZE_MUTABLE : DEBUG_NUM_THREADS;
+    uint16_t thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads;
 
-    uint16_t threads_l = DEBUG_SIZE_MUTABLE % thread_lim;
+    uint16_t threads_l = size_mutable % thread_lim;
     uint16_t threads_s = thread_lim - threads_l;
-    double rows_per_thread = (double)DEBUG_SIZE_MUTABLE/thread_lim;
+    double rows_per_thread = (double)size_mutable/thread_lim;
     uint16_t rows_per_thread_l = (uint16_t)ceil(rows_per_thread);
     uint16_t rows_per_thread_s = (uint16_t)floor(rows_per_thread);
     
@@ -39,13 +80,13 @@ int main (int argc, char *argv[]) {
 
     printf("thread_lim: %d | rows_per_thread: %f\nthreads_l: %d | rows_per_thread_l: %d\nthreads_s: %d | rows_per_thread_s: %d\n ", thread_lim, rows_per_thread, threads_l, rows_per_thread_l, threads_s, rows_per_thread_s);
 
-    double** old_arr = malloc_double_array(DEBUG_SIZE);
-    double** new_arr = malloc_double_array(DEBUG_SIZE);
+    double** old_arr = malloc_double_array(size);
+    double** new_arr = malloc_double_array(size);
 
-    old_arr = debug_populate_array(old_arr, DEBUG_SIZE, 'r');
-    new_arr = copy_array(old_arr, new_arr, DEBUG_SIZE);
+    old_arr = debug_populate_array(old_arr, size, '1');
+    new_arr = copy_array(old_arr, new_arr, size);
     
-    debug_display_array(old_arr, DEBUG_SIZE);
+    //debug_display_array(old_arr, size);
 
     uint16_t str = 0;  
     uint16_t end = 0;
@@ -84,9 +125,9 @@ int main (int argc, char *argv[]) {
     pthread_mutex_destroy(&thrds_complete_mlock);
     pthread_cond_destroy(&G_thrds_done);
 
-    debug_display_array(new_arr, DEBUG_SIZE);
-    free_double_array(old_arr, DEBUG_SIZE);
-    free_double_array(new_arr, DEBUG_SIZE);
+    //debug_display_array(new_arr, size);
+    free_double_array(old_arr, size);
+    free_double_array(new_arr, size);
     return 0;
 }
 
@@ -108,6 +149,7 @@ void free_double_array(double** arr, uint16_t size) {
 }
 
 double** debug_populate_array(double** arr, uint16_t size, char mode) {
+    srand(1);
     for (uint16_t i=0; i<size; i++) {
         for (uint16_t j=0; j<size; j++) {
             // if at the top or left boundary, set value based on mode
@@ -124,7 +166,7 @@ double** debug_populate_array(double** arr, uint16_t size, char mode) {
                         // TODO expand this so that the right and bottom boundary are included (also make less shit)
                         // cast random number between 0 and size to double
 
-                        arr[i][j] = (double)(rand() % size);
+                        arr[i][j] = (double)(rand() % 10);
                         break;
                     default:
                         arr[i][j] = 0.0;
@@ -138,7 +180,7 @@ double** debug_populate_array(double** arr, uint16_t size, char mode) {
                     case 'r':
                         // TODO expand this so that the right and bottom boundary are included (also make less shit)
                         // cast random number between 0 and size to double
-                        arr[i][j] = (double)(rand() % size);
+                        arr[i][j] = (double)(rand() % 10);
                         break;
                     default:
                         arr[i][j] = 0.0;
@@ -168,26 +210,26 @@ void* avg(void* thrd_args) {
     t_args* args = (t_args*) thrd_args;
     bool precision_met;
     bool thread_done = false;
-    //debug_display_array(args->old_arr, DEBUG_SIZE);
-    //debug_display_array(args->new_arr, DEBUG_SIZE);
+    uint32_t counter = 0;
+    //debug_display_array(args->old_arr, size);
+    //debug_display_array(args->new_arr, size);
 
     //printf("hello from thread %d, start row: %d, end row %d\n", args->thread_num, args->start_row, args->end_row);
 
     while (true) {
 
-        
+        if (counter % 1000 == 0) printf("thread %d has done %d iterations\n", args->thread_num, counter);
+        counter++;
         for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
-            for (uint16_t j=1; j<=DEBUG_SIZE_MUTABLE; j++) {
+            for (uint16_t j=1; j<=size_mutable; j++) {
                 args->new_arr[i][j] = (double)((args->old_arr[i][j-1] + args->old_arr[i][j+1] + args->old_arr[i-1][j] + args->old_arr[i+1][j])/4);
                 //printf("loop 1 - old value: %f | new value %f\n", args->old_arr[i][j], args->new_arr[i][j] );
                 
             }
         }
+
         pthread_mutex_lock(args->threads_waiting_mlock);
         G_num_thrds_waiting++;
-
-
-
         if (G_num_thrds_waiting < args->thread_lim - G_num_thrds_complete) {
             pthread_cond_wait(&G_thrds_done, args->threads_waiting_mlock);
         } else {
@@ -196,12 +238,10 @@ void* avg(void* thrd_args) {
         }
         pthread_mutex_unlock(args->threads_waiting_mlock);
 
-        
-
         precision_met = true;
         for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
-            for (uint16_t j=1; j<=DEBUG_SIZE_MUTABLE; j++) {
-                precision_met &= fabs(args->old_arr[i][j] - args->new_arr[i][j]) <= DEBUG_PRECISION;
+            for (uint16_t j=1; j<=size_mutable; j++) {
+                precision_met &= fabs(args->old_arr[i][j] - args->new_arr[i][j]) <= precision;
                 args->old_arr[i][j]=args->new_arr[i][j];
             }
         }
