@@ -12,9 +12,13 @@ pthread_cond_t G_thrds_done;
 uint16_t G_num_thrds_waiting;
 uint16_t G_num_thrds_complete;
 
-int num_threads = -1;
-int size = -1;
-double precision = -1.0;
+int arg_num_threads = -1;
+uint16_t num_threads;
+int arg_size = -1;
+uint16_t size;
+uint16_t size_mutable;
+double arg_precision = -1.0;
+double precision;
 
 bool verbose = false;
 bool print = false;
@@ -22,7 +26,7 @@ bool print = false;
 int main (int argc, char **argv) {
     int opt;
 
-	while((opt = getopt(argc, argv, ":vps:")) != -1) 
+	while((opt = getopt(argc, argv, ":vrp:s:t:")) != -1) 
 	{ 
 		switch(opt) 
 		{ 
@@ -33,40 +37,61 @@ int main (int argc, char **argv) {
                 print = true;
                 break; 
 			case 's': 
-				size = atoi(optarg);
+				arg_size = atoi(optarg);
 				break; 
             case 't': 
-				num_threads = atoi(optarg); 
+				arg_num_threads = atoi(optarg); 
 				break; 
-			case ':': 
-				precision = atof(optarg);
+			case 'p': 
+				arg_precision = atof(optarg);
 				break; 
 			case '?': 
 				printf("unknown option: %c\n", optopt); 
-				break; 
+                break; 
+            case ':': 
+				printf("missing argument: -%c\n", optopt); 
+                break; 
             default:
                 printf("unknown error");
                 break;
 		} 
 	} 
 	
-    uint16_t size_mutable = size - 2;
 	// optind is for the extra arguments 
 	// which are not parsed 
 	for(; optind < argc; optind++){	 
 		printf("extra arguments: %s\n", argv[optind]); 
 	} 
 
-    if (num_threads == -1) {
-        printf("-t required");        
+    if (arg_num_threads == -1) {
+        printf("-t required\n");     
+        exit(1);   
     } else {
+        printf("using %d threads | ", arg_num_threads);
+        num_threads = (uint16_t)(arg_num_threads);
+    }
 
+    if (arg_size == -1) {
+        printf("-s required\n");
+        exit(1);
+    } else {
+        printf("size of %dx%d | ", arg_size, arg_size);
+        size = (uint16_t)(arg_size);
+    }
+
+    if (arg_precision == -1) {
+        printf("-p required\n");
+        exit(1);
+    } else {
+        printf("%f precision\n", arg_precision);
+        precision = arg_precision;
     }
 
     pthread_mutex_t thrds_waiting_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t thrds_complete_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_cond_init(&G_thrds_done, NULL);
-
+    
+    size_mutable = (uint16_t)(arg_size - 2);
     uint16_t thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads;
 
     uint16_t threads_l = size_mutable % thread_lim;
