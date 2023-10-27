@@ -12,8 +12,11 @@ pthread_cond_t G_thrds_done;
 uint16_t G_num_thrds_waiting;
 uint16_t G_num_thrds_complete;
 
+pthread_barrier_t barrier;
+
 int arg_num_threads = -1;
 uint16_t num_threads;
+uint16_t thread_lim;
 int arg_size = -1;
 uint16_t size;
 uint16_t size_mutable;
@@ -90,9 +93,11 @@ int main (int argc, char **argv) {
     pthread_mutex_t thrds_waiting_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t thrds_complete_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_cond_init(&G_thrds_done, NULL);
+
     
     size_mutable = (uint16_t)(arg_size - 2);
-    uint16_t thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads;
+    thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads;
+    pthread_barrier_init (&barrier, NULL, thread_lim);
 
     uint16_t threads_l = size_mutable % thread_lim;
     uint16_t threads_s = thread_lim - threads_l;
@@ -111,7 +116,7 @@ int main (int argc, char **argv) {
     old_arr = debug_populate_array(old_arr, size, '1');
     new_arr = copy_array(old_arr, new_arr, size);
     
-    //debug_display_array(old_arr, size);
+    if (print) debug_display_array(old_arr, size);
 
     uint16_t str = 0;  
     uint16_t end = 0;
@@ -149,8 +154,9 @@ int main (int argc, char **argv) {
     pthread_mutex_destroy(&thrds_waiting_mlock);
     pthread_mutex_destroy(&thrds_complete_mlock);
     pthread_cond_destroy(&G_thrds_done);
+    pthread_barrier_destroy(&barrier);
 
-    //debug_display_array(new_arr, size);
+    if (print) debug_display_array(new_arr, size);
     free_double_array(old_arr, size);
     free_double_array(new_arr, size);
     return 0;
@@ -233,8 +239,7 @@ double** copy_array(double** arr1, double** arr2, uint16_t size) {
 
 void* avg(void* thrd_args) {
     t_args* args = (t_args*) thrd_args;
-    bool precision_met;
-    bool thread_done = false;
+    bool precision_met = false;
     uint32_t counter = 0;
     //debug_display_array(args->old_arr, size);
     //debug_display_array(args->new_arr, size);
@@ -243,55 +248,41 @@ void* avg(void* thrd_args) {
 
     while (true) {
 
-        if (counter % 1000 == 0) printf("thread %d has done %d iterations\n", args->thread_num, counter);
+        if (verbose) if (counter % 1000 == 0) printf("thread %d has done %d iterations\n", args->thread_num, counter);
         counter++;
-        for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
-            for (uint16_t j=1; j<=size_mutable; j++) {
-                args->new_arr[i][j] = (double)((args->old_arr[i][j-1] + args->old_arr[i][j+1] + args->old_arr[i-1][j] + args->old_arr[i+1][j])/4);
-                //printf("loop 1 - old value: %f | new value %f\n", args->old_arr[i][j], args->new_arr[i][j] );
-                
+        if (!precision_met) {
+            for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
+                for (uint16_t j=1; j<=size_mutable; j++) {
+                    args->new_arr[i][j] = (double)((args->old_arr[i][j-1] + args->old_arr[i][j+1] + args->old_arr[i-1][j] + args->old_arr[i+1][j])/4);
+                    //printf("loop 1 - old value: %f | new value %f\n", args->old_arr[i][j], args->new_arr[i][j] );
+                    
+                }
             }
         }
+        if (verbose) printf("thread %d waiting at barrier 1\n", args->thread_num);
+        pthread_barrier_wait (&barrier);
 
-        pthread_mutex_lock(args->threads_waiting_mlock);
-        G_num_thrds_waiting++;
-        if (G_num_thrds_waiting < args->thread_lim - G_num_thrds_complete) {
-            pthread_cond_wait(&G_thrds_done, args->threads_waiting_mlock);
-        } else {
-            pthread_cond_broadcast(&G_thrds_done);
-            G_num_thrds_waiting = 0;
-        }
-        pthread_mutex_unlock(args->threads_waiting_mlock);
-
-        precision_met = true;
-        for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
-            for (uint16_t j=1; j<=size_mutable; j++) {
-                precision_met &= fabs(args->old_arr[i][j] - args->new_arr[i][j]) <= precision;
-                args->old_arr[i][j]=args->new_arr[i][j];
+        if (!precision_met) {
+            precision_met = true;
+            for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
+                for (uint16_t j=1; j<=size_mutable; j++) {
+                    precision_met &= fabs(args->old_arr[i][j] - args->new_arr[i][j]) <= precision;
+                    args->old_arr[i][j]=args->new_arr[i][j];
+                }
             }
         }
-
-        pthread_mutex_lock(args->threads_waiting_mlock);
-        G_num_thrds_waiting++;
 
         pthread_mutex_lock(args->threads_complete_mlock);
-        //printf("thread %d waiting, number of threads waiting: %d\n", args->thread_num, G_num_thrds_waiting);
         if (precision_met) {
             G_num_thrds_complete++;
-            thread_done = true;
-            //printf("thread %d done, number of threads done: %d\n", args->thread_num, G_num_thrds_complete);
+            if (verbose) printf("thread %d done, number of threads done: %d\n", args->thread_num, G_num_thrds_complete);
         }
         pthread_mutex_unlock(args->threads_complete_mlock);
 
-        if (G_num_thrds_waiting < args->thread_lim - G_num_thrds_complete) {
-            pthread_cond_wait(&G_thrds_done, args->threads_waiting_mlock);
-        } else {
-            pthread_cond_broadcast(&G_thrds_done);
-            G_num_thrds_waiting = 0;
-        }
-        pthread_mutex_unlock(args->threads_waiting_mlock);
+        if (verbose) printf("thread %d waiting at barrier 2\n", args->thread_num);
+        pthread_barrier_wait (&barrier);
 
-        if (thread_done) break;
+        if (G_num_thrds_complete==thread_lim) break;
     }
 
     pthread_exit(NULL);
