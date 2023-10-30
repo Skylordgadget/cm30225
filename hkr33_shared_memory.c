@@ -8,11 +8,10 @@
 #include <unistd.h>
 #include <getopt.h>
 
-pthread_cond_t G_thrds_done;
-uint16_t G_num_thrds_waiting;
 uint16_t G_num_thrds_complete;
 
-pthread_barrier_t barrier;
+pthread_barrier_t clc_barrier;
+pthread_barrier_t cnt_barrier;
 
 int arg_num_threads = -1;
 uint16_t num_threads;
@@ -21,15 +20,18 @@ int arg_size = -1;
 uint16_t size;
 uint16_t size_mutable;
 double arg_precision = -1.0;
+char arg_mode = 'r';
 double precision;
 
 bool verbose = false;
 bool print = false;
 
+bool arr_flop = false;
+
 int main (int argc, char **argv) {
     int opt;
 
-	while((opt = getopt(argc, argv, ":vrp:s:t:")) != -1) 
+	while((opt = getopt(argc, argv, ":vrp:s:t:m:")) != -1) 
 	{ 
 		switch(opt) 
 		{ 
@@ -47,6 +49,9 @@ int main (int argc, char **argv) {
 				break; 
 			case 'p': 
 				arg_precision = atof(optarg);
+				break; 
+            case 'm': 
+				arg_mode = optarg[1];
 				break; 
 			case '?': 
 				printf("unknown option: %c\n", optopt); 
@@ -82,6 +87,8 @@ int main (int argc, char **argv) {
         size = (uint16_t)(arg_size);
     }
 
+    printf("mode %c | ", arg_mode);
+
     if (arg_precision == -1) {
         printf("-p required\n");
         exit(1);
@@ -90,14 +97,12 @@ int main (int argc, char **argv) {
         precision = arg_precision;
     }
 
-    pthread_mutex_t thrds_waiting_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t thrds_complete_mlock = PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_init(&G_thrds_done, NULL);
-
-    
+ 
     size_mutable = (uint16_t)(arg_size - 2);
     thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads;
-    pthread_barrier_init (&barrier, NULL, thread_lim);
+    pthread_barrier_init (&clc_barrier, NULL, thread_lim);
+    pthread_barrier_init (&cnt_barrier, NULL, thread_lim);
 
     uint16_t threads_l = size_mutable % thread_lim;
     uint16_t threads_s = thread_lim - threads_l;
@@ -113,7 +118,7 @@ int main (int argc, char **argv) {
     double** old_arr = malloc_double_array(size);
     double** new_arr = malloc_double_array(size);
 
-    old_arr = debug_populate_array(old_arr, size, '1');
+    old_arr = debug_populate_array(old_arr, size, arg_mode);
     new_arr = copy_array(old_arr, new_arr, size);
     
     if (print) debug_display_array(old_arr, size);
@@ -122,7 +127,6 @@ int main (int argc, char **argv) {
     uint16_t end = 0;
 
     G_num_thrds_complete = 0;
-    G_num_thrds_waiting = 0;
 
     for (uint16_t i=0; i<thread_lim; i++) {
         if (threads_l > 0) {
@@ -141,7 +145,6 @@ int main (int argc, char **argv) {
         thrd_args[i].new_arr    = new_arr;
         thrd_args[i].start_row  = str;
         thrd_args[i].end_row    = end;
-        thrd_args[i].threads_waiting_mlock = &thrds_waiting_mlock;
         thrd_args[i].threads_complete_mlock = &thrds_complete_mlock;
 
         pthread_create(&thrds[i], NULL, avg, (void*) &thrd_args[i]);
@@ -151,12 +154,17 @@ int main (int argc, char **argv) {
         pthread_join(thrds[i], NULL);
     }
 
-    pthread_mutex_destroy(&thrds_waiting_mlock);
     pthread_mutex_destroy(&thrds_complete_mlock);
-    pthread_cond_destroy(&G_thrds_done);
-    pthread_barrier_destroy(&barrier);
+    pthread_barrier_destroy(&clc_barrier);
+    pthread_barrier_destroy(&cnt_barrier);
 
-    if (print) debug_display_array(new_arr, size);
+    if (arr_flop) {
+        if (print) debug_display_array(new_arr, size);
+    } else {
+        if (print) debug_display_array(old_arr ,size);
+    }
+
+    
     free_double_array(old_arr, size);
     free_double_array(new_arr, size);
     return 0;
@@ -180,44 +188,22 @@ void free_double_array(double** arr, uint16_t size) {
 }
 
 double** debug_populate_array(double** arr, uint16_t size, char mode) {
-    srand(1);
     for (uint16_t i=0; i<size; i++) {
         for (uint16_t j=0; j<size; j++) {
             // if at the top or left boundary, set value based on mode
             // otherwise, set value 0
-            if (i == 0 || j == 0) {
-                switch(mode) {
-                    case '0':
-                        arr[i][j] = 0.0;
-                        break;
-                    case '1':
-                        arr[i][j] = 1.0;
-                        break;
-                    case 'r':
-                        // TODO expand this so that the right and bottom boundary are included (also make less shit)
-                        // cast random number between 0 and size to double
-
-                        arr[i][j] = (double)(rand() % 10);
-                        break;
-                    default:
-                        arr[i][j] = 0.0;
-                        break;
-                    }
-            } else if (i == size-1 || j == size-1) {
-                switch(mode) {
-                    case '0':
-                        arr[i][j] = 0.0;
-                        break;
-                    case 'r':
-                        // TODO expand this so that the right and bottom boundary are included (also make less shit)
-                        // cast random number between 0 and size to double
-                        arr[i][j] = (double)(rand() % 10);
-                        break;
-                    default:
-                        arr[i][j] = 0.0;
-                        break;
-                    }
-            } else arr[i][j] = 0.0;
+            arr[i][j] = 0.0;
+            switch(mode) {
+                case '1':
+                    arr[i][j] = (double)(i==0 || j == 0);
+                    break;
+                case 'r':
+                    if (i == 0 || j == 0 || i == size-1 || j == size-1) arr[i][j] = (double)(rand() % 10);
+                    break;
+                default:
+                    arr[i][j] = 0.0;
+                    break;
+            }
         }
     }
     return arr;
@@ -240,51 +226,57 @@ double** copy_array(double** arr1, double** arr2, uint16_t size) {
 void* avg(void* thrd_args) {
     t_args* args = (t_args*) thrd_args;
     bool precision_met = false;
+    bool thread_done = false;
+    
     uint32_t counter = 0;
-    //debug_display_array(args->old_arr, size);
-    //debug_display_array(args->new_arr, size);
-
-    //printf("hello from thread %d, start row: %d, end row %d\n", args->thread_num, args->start_row, args->end_row);
+    
+    double** ro_arr = args->old_arr;
+    double** wr_arr = args->new_arr;
+    double** tmp_arr;
 
     while (true) {
+        if (args->thread_num==0) arr_flop = !arr_flop;
 
-        if (verbose) if (counter % 1000 == 0) printf("thread %d has done %d iterations\n", args->thread_num, counter);
         counter++;
-        if (!precision_met) {
-            for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
-                for (uint16_t j=1; j<=size_mutable; j++) {
-                    args->new_arr[i][j] = (double)((args->old_arr[i][j-1] + args->old_arr[i][j+1] + args->old_arr[i-1][j] + args->old_arr[i+1][j])/4);
-                    //printf("loop 1 - old value: %f | new value %f\n", args->old_arr[i][j], args->new_arr[i][j] );
-                    
-                }
-            }
-        }
-        if (verbose) printf("thread %d waiting at barrier 1\n", args->thread_num);
-        pthread_barrier_wait (&barrier);
-
-        if (!precision_met) {
+        
+        if (!thread_done) {
             precision_met = true;
             for (uint16_t i=(args->start_row); i<=(args->end_row); i++) {
                 for (uint16_t j=1; j<=size_mutable; j++) {
-                    precision_met &= fabs(args->old_arr[i][j] - args->new_arr[i][j]) <= precision;
-                    args->old_arr[i][j]=args->new_arr[i][j];
+                    wr_arr[i][j] = (double)((ro_arr[i][j-1] + ro_arr[i][j+1] + ro_arr[i-1][j] + ro_arr[i+1][j])/4);
+                    precision_met &= fabs(ro_arr[i][j] - wr_arr[i][j]) <= precision;
                 }
             }
         }
+        
+        if (verbose) if (precision_met && !thread_done) printf("thread %d met precision\n",args->thread_num);
 
-        pthread_mutex_lock(args->threads_complete_mlock);
-        if (precision_met) {
+        tmp_arr = ro_arr;
+        ro_arr = wr_arr;
+        wr_arr = tmp_arr;
+
+        if (verbose) printf("thread %d waiting at clc_barrier 1 on iteration %d\n", args->thread_num, counter);
+        pthread_barrier_wait(&cnt_barrier);
+        if (verbose) if (!args->thread_num) printf("threads passing clc_barrier 1\n"); 
+
+        if (precision_met && !thread_done) {
+            thread_done = true;
+            pthread_mutex_lock(args->threads_complete_mlock);
             G_num_thrds_complete++;
+            pthread_mutex_unlock(args->threads_complete_mlock);
             if (verbose) printf("thread %d done, number of threads done: %d\n", args->thread_num, G_num_thrds_complete);
         }
-        pthread_mutex_unlock(args->threads_complete_mlock);
 
-        if (verbose) printf("thread %d waiting at barrier 2\n", args->thread_num);
-        pthread_barrier_wait (&barrier);
+        if (verbose) printf("thread %d waiting at clc_barrier 2 on iteration %d\n", args->thread_num, counter);
+        pthread_barrier_wait (&clc_barrier);
+        if (verbose) if (!args->thread_num) printf("threads passing clc_barrier 2\n"); 
 
-        if (G_num_thrds_complete==thread_lim) break;
+        if (G_num_thrds_complete==thread_lim) {
+            if (verbose) printf("       thread %d breaking\n", args->thread_num);
+            break;
+        }
     }
-
+    if (args->thread_num==0) printf("arr_flop: %d\n", arr_flop);
     pthread_exit(NULL);
     return 0;
 }

@@ -24,7 +24,6 @@
         double**            new_arr;
         uint16_t            start_row;
         uint16_t            end_row;   
-        pthread_mutex_t*    threads_waiting_mlock;
         pthread_mutex_t*    threads_complete_mlock;
     } t_args;
 #endif
