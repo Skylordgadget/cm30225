@@ -17,13 +17,20 @@
 
     void*       avg(void* thrd_args);
 
+    void        write_csv(double** arr, uint16_t size, FILE* fpt);
+
     typedef struct thread_args{
         uint16_t            thread_lim;
         uint16_t            thread_num;
+        uint16_t            size_mutable;
+        bool                verbose;
+        double              precision;
         double**            old_arr;
         double**            new_arr;
+        double**            utd_arr;
         uint16_t            start_row;
         uint16_t            end_row;   
         pthread_mutex_t*    threads_complete_mlock;
+        pthread_barrier_t*  barrier;
     } t_args;
 #endif
