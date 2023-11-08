@@ -1,5 +1,5 @@
 clf; clear;
-m = readtable(".\bin\hkr33_result.csv");
+m = readtable(".\bin\out_4t_10s_p1e-9.csv");
 Z = m{:,:};
 [X_s,Y_s] = size(Z);
 [X,Y] = meshgrid(0:X_s-1,0:Y_s-1);

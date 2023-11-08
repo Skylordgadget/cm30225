@@ -3,11 +3,13 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <math.h>
-#include <hkr33_shared_memory.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <time.h>
 
+#define DEBUG 1
+
+uint16_t G_num_thrds_complete = 0; 
 double** G_utd_arr; // up-to-date array pointer
 
 double** malloc_double_array(uint16_t size) {
@@ -28,18 +30,29 @@ void free_double_array(double** arr, uint16_t size) {
 }
 
 double** debug_populate_array(double** arr, uint16_t size, char mode) {
+    //srand(1);
     for (uint16_t i=0; i<size; i++) {
         for (uint16_t j=0; j<size; j++) {
-            // if at the top or left boundary, set value based on mode
-            // otherwise, set value 0
-            arr[i][j] = 0.0;
+            /* if at the top or left boundary, set value based on mode
+            otherwise, set value 0 */
+            
             switch(mode) {
                 case '1':
-                    arr[i][j] = (double)(i==0 || j == 0);
+                    if (i==0 || j == 0) arr[i][j] = 1.0; 
+                    else arr[i][j] = 0.0;
                     break;
                 case 'r':
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
                         arr[i][j] = (double)(rand() % 10);
+                    else arr[i][j] = 0.0;
+                    break;
+                case 'q':
+                    arr[i][j] = (double)(rand() % 10);
+                    break;
+                case 'u':
+                    if (i == 0 || j == 0 || i == size-1 || j == size-1) 
+                        arr[i][j] = (double)(i*j);
+                    else arr[i][j] = 0.0;
                     break;
                 default:
                     arr[i][j] = 0.0;
@@ -68,47 +81,66 @@ void write_csv(double** arr, uint16_t size, FILE* fpt) {
 }
 
 
-double** copy_array(double** arr1, double** arr2, uint16_t size) {
+double** copy_array(double** arr_a, double** arr_b, uint16_t size) {
     for (uint16_t i=0; i<size; i++)  
-        for (uint16_t j=0; j<size; j++) arr2[i][j] = arr1[i][j];
-    return arr2;
+        for (uint16_t j=0; j<size; j++) arr_b[i][j] = arr_a[i][j];
+    return arr_b;
 }
 
-void avg(double** ro_arr, double** wr_arr, uint16_t size_mutable) {
-    bool precision_met = false;
-    bool thread_done = false;
+void avg(double** old_arr, double** new_arr, uint16_t size_mutable, \
+            double precision) {
+    #ifdef DEBUG
+        int counter = 0;
+    #endif
 
+    bool precision_met = false;
+
+    double** ro_arr = old_arr;
+    double** wr_arr = new_arr;
     double** tmp_arr;
 
     while (true) {
+        #ifdef DEBUG
+            counter++;
+        #endif
 
         precision_met = true;
+        // loop over rows
         for (uint16_t i=1; i<=size_mutable; i++) {
+            // loop over columns
             for (uint16_t j=1; j<=size_mutable; j++) {
-                wr_arr[i][j] = \
-                    (double)((ro_arr[i][j-1] + ro_arr[i][j+1] + \
-                                ro_arr[i-1][j] + ro_arr[i+1][j])/4);
+                // add up surrounding four value and divide by four
+                wr_arr[i][j] = (ro_arr[i][j-1] + ro_arr[i][j+1] + \
+                                ro_arr[i-1][j] + ro_arr[i+1][j])/4.0;
                 precision_met &= \
                     fabs(ro_arr[i][j] - wr_arr[i][j]) <= precision;
             }
         }
         
+
+        // flip pointers
         tmp_arr = ro_arr;
         ro_arr = wr_arr;
         wr_arr = tmp_arr;
-        G_utd_arr = ro_arr;
+        G_utd_arr = ro_arr; 
 
         if (precision_met) break;
     }
-    pthread_exit(NULL);
-    return 0;
+
+    #ifdef DEBUG
+        printf("counter: %d\n", counter);
+    #endif
 }
 
+/* /////////////////////////////////////////////////////////////////////////////
+   //                                                                         //
+   // main                                                                    //
+   //                                                                         //
+*/ /////////////////////////////////////////////////////////////////////////////
 
 int main (int argc, char **argv) {
-    const char  mode = '1';
+    const char  mode = 'u';
     FILE*       fpt;
-
     // command line arguments
     int         size_arg = -1;
     uint16_t    size;
@@ -117,20 +149,19 @@ int main (int argc, char **argv) {
     double      precision_arg = -1.0;
     double      precision;
 
+    char*       file_path=NULL;
+
     bool        verbose = false;
     bool        print = false;
-    bool        csv = false;
     
     int opt;
     
+    struct timespec timer_start, timer_end;
 
-    while((opt = getopt(argc, argv, ":cvap:s:")) != -1) 
+    while((opt = getopt(argc, argv, ":vap:s:f:")) != -1) 
     { 
         switch(opt) 
         { 
-            case 'c':
-                csv = true;
-                break;
             case 'v':
                 verbose = true;
                 break;
@@ -143,6 +174,9 @@ int main (int argc, char **argv) {
             case 'p': 
                 precision_arg = atof(optarg);
                 break; 
+            case 'f':
+                file_path = optarg;
+                break;
             case '?': 
                 printf("unknown option: %c\n", optopt); 
                 break; 
@@ -152,14 +186,11 @@ int main (int argc, char **argv) {
         } 
     } 
     
-    // optind is for the extra arguments 
-    // which are not parsed 
+    // optind is for the extra arguments which are not parsed
     for(; optind < argc; optind++){	 
         printf("extra arguments: %s\n", argv[optind]); 
     } 
 
-    // size and precision are required
-    // if -1 is not overwritten, the program will exit
     if (size_arg == -1) {
         printf("-s required\n");
         exit(1);
@@ -178,10 +209,7 @@ int main (int argc, char **argv) {
 
     printf("mode %c\n", mode);
 
- 
     size_mutable = size - 2; // array borders are not mutable
-    // if there are more threads than rows in the array,
-    // set thread_lim = size_mutable, otherwise thread_lim = num_threads   
 
     double** old_arr = malloc_double_array(size);
     double** new_arr = malloc_double_array(size);
@@ -191,20 +219,27 @@ int main (int argc, char **argv) {
     
     if (print) debug_display_array(old_arr, size);
 
-    avg()
+
+    clock_gettime(CLOCK_REALTIME, &timer_start); // start timing code here
+    avg(old_arr, new_arr, size_mutable, precision);
+    clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
+    
+    printf("time: %fs\n", ((double)(timer_end.tv_sec - timer_start.tv_sec) + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9)));
 
     if (print) debug_display_array(G_utd_arr, size);
 
-    if (csv) {
-        fpt = fopen(".\\bin\\hkr33_result.csv", "w");
-        if (fpt == NULL) perror("fopen");
-        write_csv(G_utd_arr, size, fpt);
-        fclose(fpt);
+    if (!(file_path==NULL)) {
+        if (verbose) printf("outputting to %s\n", file_path);
+        fpt = fopen(file_path, "w");
+        if (fpt == NULL) {
+            perror("fopen");
+        } else {
+            write_csv(G_utd_arr, size, fpt);
+            fclose(fpt);
+        }
     }
 
-    
     free_double_array(old_arr, size);
     free_double_array(new_arr, size);
     return 0;
 }
-

@@ -8,7 +8,9 @@
 #include <getopt.h>
 #include <time.h>
 
-typedef struct thread_args{
+#define DEBUG 1 
+
+typedef struct thread_args {
         uint16_t            thread_lim;
         uint16_t            thread_num;
         uint16_t            size_mutable;
@@ -19,11 +21,10 @@ typedef struct thread_args{
         uint16_t            end_row;   
         pthread_mutex_t*    threads_complete_mlock;
         pthread_barrier_t*  barrier;
-    } t_args;
+} t_args;
 
 uint16_t G_num_thrds_complete = 0; 
 double** G_utd_arr; // up-to-date array pointer
-
 
 double** malloc_double_array(uint16_t size) {
     // malloc for the pointers to each row
@@ -42,26 +43,33 @@ void free_double_array(double** arr, uint16_t size) {
     free(arr);
 }
 
+// populate 2D array based on selected mode
 double** debug_populate_array(double** arr, uint16_t size, char mode) {
-    srand(1);
+    //srand(1);
     for (uint16_t i=0; i<size; i++) {
         for (uint16_t j=0; j<size; j++) {
             /* if at the top or left boundary, set value based on mode
             otherwise, set value 0 */
             
             switch(mode) {
-                case '1':
-                    arr[i][j] = (double)(i==0 || j == 0);
+                case '1': // 1s along the top and left, 0s everywhere else
+                    if (i==0 || j == 0) arr[i][j] = 1.0; 
+                    else arr[i][j] = 0.0;
                     break;
-                case 'r':
+                case 'r': // random numbers between 0 and 9 on the borders
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
                         arr[i][j] = (double)(rand() % 10);
                     else arr[i][j] = 0.0;
                     break;
-                case 'q':
+                case 'q': // random numbers between 0 and 9 for every element
                     arr[i][j] = (double)(rand() % 10);
                     break;
-                default:
+                case 'u': // on the borders, each element = x_idx*y_idx else 0s 
+                    if (i == 0 || j == 0 || i == size-1 || j == size-1) 
+                        arr[i][j] = (double)(i*j);
+                    else arr[i][j] = 0.0;
+                    break;
+                default: // 0s everywhere
                     arr[i][j] = 0.0;
                     break;
             }
@@ -70,6 +78,7 @@ double** debug_populate_array(double** arr, uint16_t size, char mode) {
     return arr;
 }
 
+// print contents of 2D array
 void debug_display_array(double** arr, uint16_t size) {
     for (uint16_t i=0; i<size; i++) { 
         for (uint16_t j=0; j<size; j++) printf("%.12f ", arr[i][j]);
@@ -78,7 +87,7 @@ void debug_display_array(double** arr, uint16_t size) {
     printf("\n");
 }
 
-
+// take 2D array and write contents into file using a file pointer
 void write_csv(double** arr, uint16_t size, FILE* fpt) {
     for (uint16_t i=0; i<size; i++) { 
         for (uint16_t j=0; j<size; j++) fprintf(fpt, "%.12f,", arr[i][j]);
@@ -87,14 +96,19 @@ void write_csv(double** arr, uint16_t size, FILE* fpt) {
     fprintf(fpt, "\n");
 }
 
-
-double** copy_array(double** arr1, double** arr2, uint16_t size) {
+// duplicate contents of 2D array arr_a into arr_b
+double** copy_array(double** arr_a, double** arr_b, uint16_t size) {
     for (uint16_t i=0; i<size; i++)  
-        for (uint16_t j=0; j<size; j++) arr2[i][j] = arr1[i][j];
-    return arr2;
+        for (uint16_t j=0; j<size; j++) arr_b[i][j] = arr_a[i][j];
+    return arr_b;
 }
 
+// relaxation method function given to each thread
 void* avg(void* thrd_args) {
+    #ifdef DEBUG
+        int counter = 0;
+    #endif
+
     t_args* args = (t_args*) thrd_args;
     bool precision_met = false;
     bool thread_done = false;
@@ -104,6 +118,11 @@ void* avg(void* thrd_args) {
     double** tmp_arr;
 
     while (true) {
+        #ifdef DEBUG
+            // debug count of number of iterations thread 0 performs
+            if (args->thread_num==0) counter++;
+        #endif
+
         /* if the thread hasn't already finished it may continue averaging.
         Otherwise, it will skip this and hit the first barrier */
         if (!thread_done) {
@@ -129,7 +148,7 @@ void* avg(void* thrd_args) {
         ro_arr = wr_arr;
         wr_arr = tmp_arr;
         /* on the first thread, keep track of the most up-to-date array
-        this increases the work of thread 0 */
+        this marginally increases the work of thread 0 */
         if (args->thread_num==0) G_utd_arr = ro_arr; 
 
         // synchronise threads
@@ -151,14 +170,29 @@ void* avg(void* thrd_args) {
         done averaging */
 
         /* when all threads have met precision, break out of the loop.
-        Otherwise, complete threads will busy wait at barriers*/
+        Otherwise, complete threads will busy wait at barriers
+        
+        Note that, this shared variable is not mutexed as it is only read after
+        threads synchronise at the second barrier and before threads synchronise 
+        at the first barrier, hence, it is safe to read without a mutex */
         if (G_num_thrds_complete>=args->thread_lim) break;
     }
+
+    #ifdef DEBUG
+        if (args->thread_num==0) printf("counter: %d\n", counter);
+    #endif
+
     return 0;
 }
 
+/* /////////////////////////////////////////////////////////////////////////////
+   //                                                                         //
+   // main                                                                    //
+   //                                                                         //
+*/ /////////////////////////////////////////////////////////////////////////////
+
 int main (int argc, char **argv) {
-    const char  mode = 'q';
+    const char  mode = 'u';
     FILE*       fpt;
     // command line arguments
     int         num_threads_arg = -1; 
@@ -172,7 +206,7 @@ int main (int argc, char **argv) {
     double      precision_arg = -1.0;
     double      precision;
 
-    char*       file_path;
+    char*       file_path=NULL;
 
     bool        verbose = false;
     bool        print = false;
@@ -313,7 +347,7 @@ int main (int argc, char **argv) {
     }
 
     clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
-    printf("time: %fs\n", (timer_end.tv_nsec - timer_start.tv_nsec)/1e+9);
+    printf("time: %fs\n", ((double)(timer_end.tv_sec - timer_start.tv_sec) + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9)));
 
     pthread_mutex_destroy(&thrds_complete_mlock);
     pthread_barrier_destroy(&barrier);
