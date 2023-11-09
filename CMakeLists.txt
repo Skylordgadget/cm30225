@@ -8,8 +8,8 @@ include_directories(inc)
 
 # add_executable(cwk1 wikipediea.c)
 # add_executable(cwk1 frieden.c)
-add_executable(cwk1 hkr33_shared_memory.c)
-# add_executable(cwk1 hkr33_shared_memory_sequential.c)
+# add_executable(cwk1 hkr33_shared_memory.c)
+add_executable(cwk1 hkr33_shared_memory_sequential.c)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

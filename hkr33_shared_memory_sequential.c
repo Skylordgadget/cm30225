@@ -9,8 +9,25 @@
 
 #define DEBUG 1
 
-uint16_t G_num_thrds_complete = 0; 
+#ifdef _WIN32
+    #define SLASH "\\"
+#elif __linux__
+    #define SLASH "/"
+#endif
+
 double** G_utd_arr; // up-to-date array pointer
+
+void remove_spaces(char *str)
+{
+    // To keep track of non-space character count
+    int count = 0;
+    // Traverse the provided string. If the current character is not a space,
+    //move it to index 'count++'.
+    for (int i = 0; str[i]; i++)
+        if (str[i] != ' ')
+            str[count++] = str[i]; // here count is incremented
+    str[count] = '\0';
+}
 
 double** malloc_double_array(uint16_t size) {
     // malloc for the pointers to each row
@@ -29,6 +46,7 @@ void free_double_array(double** arr, uint16_t size) {
     free(arr);
 }
 
+// populate 2D array based on selected mode
 double** debug_populate_array(double** arr, uint16_t size, char mode) {
     //srand(1);
     for (uint16_t i=0; i<size; i++) {
@@ -37,25 +55,31 @@ double** debug_populate_array(double** arr, uint16_t size, char mode) {
             otherwise, set value 0 */
             
             switch(mode) {
-                case '1':
+                case '1': // 1s along the top and left, 0s everywhere else
                     if (i==0 || j == 0) arr[i][j] = 1.0; 
                     else arr[i][j] = 0.0;
                     break;
-                case 'r':
+                case 'r': // random numbers between 0 and 9 on the borders
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
                         arr[i][j] = (double)(rand() % 10);
                     else arr[i][j] = 0.0;
                     break;
-                case 'q':
+                case 'q': // random numbers between 0 and 9 for every element
                     arr[i][j] = (double)(rand() % 10);
                     break;
-                case 'u':
+                case 'u': // on the borders, each element = x_idx*y_idx else 0s 
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
                         arr[i][j] = (double)(i*j);
                     else arr[i][j] = 0.0;
                     break;
-                default:
-                    arr[i][j] = 0.0;
+                case 'g':
+                    if (i == 0 || j == 0 || i == size-1 || j == size-1) 
+                        arr[i][j] = 1.0;
+                    else arr[i][j] = (double)(rand() % 10);
+                    break;
+                default: // 0s everywhere
+                    printf("mode %c unrecognised", mode);
+                    exit(1);
                     break;
             }
         }
@@ -113,7 +137,7 @@ void avg(double** old_arr, double** new_arr, uint16_t size_mutable, \
                 wr_arr[i][j] = (ro_arr[i][j-1] + ro_arr[i][j+1] + \
                                 ro_arr[i-1][j] + ro_arr[i+1][j])/4.0;
                 precision_met &= \
-                    fabs(ro_arr[i][j] - wr_arr[i][j]) <= precision;
+                    fabs(ro_arr[i][j] - wr_arr[i][j]) < precision;
             }
         }
         
@@ -139,7 +163,6 @@ void avg(double** old_arr, double** new_arr, uint16_t size_mutable, \
 */ /////////////////////////////////////////////////////////////////////////////
 
 int main (int argc, char **argv) {
-    const char  mode = 'u';
     FILE*       fpt;
     // command line arguments
     int         size_arg = -1;
@@ -150,15 +173,19 @@ int main (int argc, char **argv) {
     double      precision;
 
     char*       file_path=NULL;
+    char        out_path[255];
 
     bool        verbose = false;
     bool        print = false;
+    bool        output = false;
     
+    char        mode = 'g';
+
     int opt;
     
     struct timespec timer_start, timer_end;
 
-    while((opt = getopt(argc, argv, ":vap:s:f:")) != -1) 
+    while((opt = getopt(argc, argv, ":vaom:p:s:t:f:")) != -1) 
     { 
         switch(opt) 
         { 
@@ -168,6 +195,9 @@ int main (int argc, char **argv) {
             case 'a':
                 print = true;
                 break; 
+            case 'o':
+                output = true;
+                break;
             case 's': 
                 size_arg = atoi(optarg);
                 break; 
@@ -175,7 +205,12 @@ int main (int argc, char **argv) {
                 precision_arg = atof(optarg);
                 break; 
             case 'f':
+                remove_spaces(optarg);
                 file_path = optarg;
+                break;
+            case 'm':
+                remove_spaces(optarg);
+                mode = (char)(optarg[0]);
                 break;
             case '?': 
                 printf("unknown option: %c\n", optopt); 
@@ -207,6 +242,10 @@ int main (int argc, char **argv) {
         precision = precision_arg;
     }
 
+    snprintf(out_path, sizeof(out_path), \
+                "..%sout%sres_seq_%ds_%fp.txt", \
+                    SLASH, SLASH, size, precision);
+
     printf("mode %c\n", mode);
 
     size_mutable = size - 2; // array borders are not mutable
@@ -223,10 +262,22 @@ int main (int argc, char **argv) {
     clock_gettime(CLOCK_REALTIME, &timer_start); // start timing code here
     avg(old_arr, new_arr, size_mutable, precision);
     clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
-    
-    printf("time: %fs\n", ((double)(timer_end.tv_sec - timer_start.tv_sec) + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9)));
+    double time = (double)(timer_end.tv_sec - timer_start.tv_sec) 
+                + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9);
+
+    if (verbose) printf("time: %fs\n", time);
 
     if (print) debug_display_array(G_utd_arr, size);
+
+    if (output) {
+        if (verbose) printf("outputting to %s\n", out_path);
+        fpt = fopen(out_path, "w");
+        if (fpt == NULL) {
+            perror("fopen");
+        } else {
+            fprintf(fpt, "Sequential, %d, %f, %f", size, time, precision);
+        }
+    }
 
     if (!(file_path==NULL)) {
         if (verbose) printf("outputting to %s\n", file_path);

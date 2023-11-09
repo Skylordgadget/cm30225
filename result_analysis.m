@@ -1,9 +1,10 @@
 clf; clear;
-m = readtable(".\bin\out_4t_10s_p1e-9.csv");
+m = readtable(".\bin\out_12t_1000s_p0.5_gay.csv");
 Z = m{:,:};
 [X_s,Y_s] = size(Z);
 [X,Y] = meshgrid(0:X_s-1,0:Y_s-1);
-surf(X,Y,Z)
+plt = surf(X,Y,Z);
+set(plt, 'edgecolor', 'none')
 
 % m = readtable(".\batch_run_result.csv");
 % M = m{:,:};

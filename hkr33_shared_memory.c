@@ -135,7 +135,6 @@ void* avg(void* thrd_args) {
 
     t_args* args = (t_args*) thrd_args;
     bool precision_met = false;
-    bool thread_done = false;
 
     double** ro_arr = args->old_arr;
     double** wr_arr = args->new_arr;
@@ -147,23 +146,20 @@ void* avg(void* thrd_args) {
             if (args->thread_num==0) counter++;
         #endif
 
-        /* if the thread hasn't already finished it may continue averaging.
-        Otherwise, it will skip this and hit the first barrier */
-        if (!thread_done) {
-            precision_met = true;
-            // loop over rows thread will operate on
-            for (uint16_t i=args->start_row; i<=args->end_row; i++) {
-                // loop over columns
-                for (uint16_t j=1; j<=args->size_mutable; j++) {
-                    // add up surrounding four value and divide by four
-                    wr_arr[i][j] = (ro_arr[i][j-1] + ro_arr[i][j+1] + \
-                                    ro_arr[i-1][j] + ro_arr[i+1][j])/4.0;
-                    /* precision_met starts as 1, if any element the thread is
-                    working on has not met precision it will turn the 
-                    variable 0, staying 0 until the next iteration */
-                    precision_met &= \
-                        fabs(ro_arr[i][j] - wr_arr[i][j]) <= args->precision;
-                }
+
+        precision_met = true;
+        // loop over rows thread will operate on
+        for (uint16_t i=args->start_row; i<=args->end_row; i++) {
+            // loop over columns
+            for (uint16_t j=1; j<=args->size_mutable; j++) {
+                // add up surrounding four value and divide by four
+                wr_arr[i][j] = (ro_arr[i][j-1] + ro_arr[i][j+1] + \
+                                ro_arr[i-1][j] + ro_arr[i+1][j])/4.0;
+                /* precision_met starts as 1, if any element the thread is
+                working on has not met precision it will turn the 
+                variable 0, staying 0 until the next iteration */
+                precision_met &= \
+                    fabs(ro_arr[i][j] - wr_arr[i][j]) < args->precision;
             }
         }
 
@@ -180,8 +176,7 @@ void* avg(void* thrd_args) {
 
         /* one-by-one increment the count of complete threads if the
         precision has been met and the thread isn't already done*/
-        if (precision_met && !thread_done) {
-            thread_done = true;
+        if (precision_met) {
             pthread_mutex_lock(args->threads_complete_mlock);
                 ++G_num_thrds_complete;
             pthread_mutex_unlock(args->threads_complete_mlock);
@@ -200,6 +195,8 @@ void* avg(void* thrd_args) {
         threads synchronise at the second barrier and before threads synchronise 
         at the first barrier, hence, it is safe to read without a mutex */
         if (G_num_thrds_complete>=args->thread_lim) break;
+        else if (args->thread_num==0) G_num_thrds_complete = 0;
+
     }
 
     #ifdef DEBUG
