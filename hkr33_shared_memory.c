@@ -418,7 +418,7 @@ int main (int argc, char **argv) {
         if (fpt == NULL) {
             perror("fopen");
         } else {
-            fprintf("threads, size, time (s), precision\n");
+            fprintf(fpt, "threads, size, time (s), precision\n");
             fprintf(fpt, "%d, %d, %f, %f\n", num_threads, size, time, precision);
         }
     }
