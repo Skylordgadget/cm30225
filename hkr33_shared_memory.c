@@ -10,6 +10,12 @@
 
 #define DEBUG 1 
 
+#ifdef _WIN32
+    #define SLASH "\\"
+#elif __linux__
+    #define SLASH "/"
+#endif
+
 typedef struct thread_args {
         uint16_t            thread_lim;
         uint16_t            thread_num;
@@ -25,6 +31,18 @@ typedef struct thread_args {
 
 uint16_t G_num_thrds_complete = 0; 
 double** G_utd_arr; // up-to-date array pointer
+
+void remove_spaces(char *str)
+{
+    // To keep track of non-space character count
+    int count = 0;
+    // Traverse the provided string. If the current character is not a space,
+    //move it to index 'count++'.
+    for (int i = 0; str[i]; i++)
+        if (str[i] != ' ')
+            str[count++] = str[i]; // here count is incremented
+    str[count] = '\0';
+}
 
 double** malloc_double_array(uint16_t size) {
     // malloc for the pointers to each row
@@ -69,8 +87,14 @@ double** debug_populate_array(double** arr, uint16_t size, char mode) {
                         arr[i][j] = (double)(i*j);
                     else arr[i][j] = 0.0;
                     break;
+                case 'g':
+                    if (i == 0 || j == 0 || i == size-1 || j == size-1) 
+                        arr[i][j] = 1.0;
+                    else arr[i][j] = (double)(rand() % 10);
+                    break;
                 default: // 0s everywhere
-                    arr[i][j] = 0.0;
+                    printf("mode %c unrecognised", mode);
+                    exit(1);
                     break;
             }
         }
@@ -192,7 +216,6 @@ void* avg(void* thrd_args) {
 */ /////////////////////////////////////////////////////////////////////////////
 
 int main (int argc, char **argv) {
-    const char  mode = 'u';
     FILE*       fpt;
     // command line arguments
     int         num_threads_arg = -1; 
@@ -207,15 +230,19 @@ int main (int argc, char **argv) {
     double      precision;
 
     char*       file_path=NULL;
+    char        out_path[255];
 
     bool        verbose = false;
     bool        print = false;
+    bool        output = false;
+
+    char        mode = 'g';
     
     int opt;
     
     struct timespec timer_start, timer_end;
 
-    while((opt = getopt(argc, argv, ":vap:s:t:f:")) != -1) 
+    while((opt = getopt(argc, argv, ":vaom:p:s:t:f:")) != -1) 
     { 
         switch(opt) 
         { 
@@ -225,6 +252,9 @@ int main (int argc, char **argv) {
             case 'a':
                 print = true;
                 break; 
+            case 'o':
+                output = true;
+                break;
             case 's': 
                 size_arg = atoi(optarg);
                 break; 
@@ -235,7 +265,12 @@ int main (int argc, char **argv) {
                 precision_arg = atof(optarg);
                 break; 
             case 'f':
+                remove_spaces(optarg);
                 file_path = optarg;
+                break;
+            case 'm':
+                remove_spaces(optarg);
+                mode = (char)(optarg[0]);
                 break;
             case '?': 
                 printf("unknown option: %c\n", optopt); 
@@ -248,13 +283,13 @@ int main (int argc, char **argv) {
     
     // optind is for the extra arguments which are not parsed
     for(; optind < argc; optind++){	 
-        printf("extra arguments: %s\n", argv[optind]); 
+        printf("WARNING extra arguments: %s\n", argv[optind]); 
     } 
 
     /* num_threads, size and precision are required
     if -1 is not overwritten, the program will exit */
     if (num_threads_arg == -1) {
-        printf("-t required\n");     
+        printf("ERROR -t required\n");     
         exit(1);   
     } else {
         printf("using %d threads | ", num_threads_arg);
@@ -262,7 +297,7 @@ int main (int argc, char **argv) {
     }
 
     if (size_arg == -1) {
-        printf("-s required\n");
+        printf("ERROR -s required\n");
         exit(1);
     } else {
         printf("size of %dx%d | ", size_arg, size_arg);
@@ -270,7 +305,7 @@ int main (int argc, char **argv) {
     }
 
     if (precision_arg == -1) {
-        printf("-p required\n");
+        printf("ERROR -p required\n");
         exit(1);
     } else {
         printf("%f precision | ", precision_arg);
@@ -278,6 +313,10 @@ int main (int argc, char **argv) {
     }
 
     printf("mode %c\n", mode);
+    
+    snprintf(out_path, sizeof(out_path), \
+                "..%sout%sres_%dt_%ds_%fp.txt", \
+                    SLASH, SLASH, num_threads, size, precision);
 
     pthread_mutex_t thrds_complete_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_barrier_t barrier;
@@ -287,7 +326,10 @@ int main (int argc, char **argv) {
     set thread_lim = size_mutable, otherwise thread_lim = num_threads */  
     thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads;
     
-    pthread_barrier_init(&barrier, NULL, thread_lim);
+    if (pthread_barrier_init(&barrier, NULL, thread_lim) != 0) {
+        printf("ERROR pthread barrier failed to initialise\n");
+        exit(1);
+    }
 
     /* if thread_lim is not divisible by the mutable array size,
     threads_l = number of threads that need to do more work */
@@ -339,20 +381,49 @@ int main (int argc, char **argv) {
         thrd_args[i].barrier = &barrier;
         thrd_args[i].threads_complete_mlock = &thrds_complete_mlock;
 
-        pthread_create(&thrds[i], NULL, avg, (void*) &thrd_args[i]);
+        // spin up threads
+        if (pthread_create(&thrds[i], NULL, avg, (void*) &thrd_args[i]) != 0) {
+            printf("ERROR pthread create failed at thread %d\n", i);
+            exit(1);
+        }
     }
 
-    for (uint16_t i=0; i<thread_lim; i++){
-        pthread_join(thrds[i], NULL);
+    // wait for all threads to finish before continuing  
+    for (uint16_t i=0; i<thread_lim; i++) {
+        if (pthread_join(thrds[i], NULL) != 0) {
+            printf("ERROR pthread join failed at thread %d\n", i);
+            exit(1);
+        }
+    }
+
+    // destroy mutex  
+    if (pthread_mutex_destroy(&thrds_complete_mlock) != 0) {
+        printf("ERROR pthread mutex destroy failed\n");
+        exit(1);
+    }
+    // destroy barrier  
+    if (pthread_barrier_destroy(&barrier) != 0) {
+        printf("ERROR pthread barrier destroy failed\n");
+        exit(1);
     }
 
     clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
-    printf("time: %fs\n", ((double)(timer_end.tv_sec - timer_start.tv_sec) + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9)));
+    double time = (double)(timer_end.tv_sec - timer_start.tv_sec) 
+                    + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9);
 
-    pthread_mutex_destroy(&thrds_complete_mlock);
-    pthread_barrier_destroy(&barrier);
+    if (verbose) printf("time: %fs\n", time);
 
     if (print) debug_display_array(G_utd_arr, size);
+
+    if (output) {
+        if (verbose) printf("outputting to %s\n", out_path);
+        fpt = fopen(out_path, "w");
+        if (fpt == NULL) {
+            perror("fopen");
+        } else {
+            fprintf(fpt, "%d, %d, %f, %f", num_threads, size, time, precision);
+        }
+    }
 
     if (!(file_path==NULL)) {
         if (verbose) printf("outputting to %s\n", file_path);
