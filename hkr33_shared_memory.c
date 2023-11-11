@@ -332,10 +332,8 @@ int main (int argc, char **argv) {
     threads_l = number of threads that need to do more work */
     uint16_t threads_l = size_mutable % thread_lim;
 
-    double rows_per_thread = (double)size_mutable / thread_lim;
-
-    uint16_t rows_per_thread_l = (uint16_t)ceil(rows_per_thread);
-    uint16_t rows_per_thread_s = (uint16_t)floor(rows_per_thread);
+    uint16_t rows_per_thread_s = size_mutable / thread_lim;
+    uint16_t rows_per_thread_l = rows_per_thread_s + 1;
     
     t_args      thrd_args[thread_lim];
     pthread_t   thrds[thread_lim];
