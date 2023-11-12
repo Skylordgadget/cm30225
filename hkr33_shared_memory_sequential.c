@@ -275,7 +275,7 @@ int main (int argc, char **argv) {
         if (fpt == NULL) {
             perror("fopen");
         } else {
-            fprintf(fpt, "Sequential, %d, %f, %f", size, time, precision);
+            fprintf(fpt, "%d, %f, %f\n", size, time, precision);
         }
     }
 
