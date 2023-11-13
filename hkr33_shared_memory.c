@@ -171,8 +171,9 @@ void* avg(void* thrd_args) {
         this marginally increases the work of thread 0 */
         if (args->thread_num==0) G_utd_arr = ro_arr; 
 
-        // synchronise threads
-        pthread_barrier_wait(args->barrier); 
+        /* synchronise all threads before incrementing the number of 
+        complete threads */
+        //pthread_barrier_wait(args->barrier); 
 
         /* one-by-one increment the count of complete threads if the
         precision has been met and the thread isn't already done*/
@@ -186,9 +187,9 @@ void* avg(void* thrd_args) {
         pthread_barrier_wait(args->barrier);
         /* this prevents threads leaving before others have reached the first 
         barrier as well as stopping threads updaing the array before others are
-        done averaging */
+        done averaging
 
-        /* when all threads have met precision, break out of the loop.
+        when all threads have met precision, break out of the loop.
         Otherwise, complete threads will busy wait at barriers
         
         Note that, this shared variable is not mutexed as it is only read after
@@ -196,7 +197,6 @@ void* avg(void* thrd_args) {
         at the first barrier, hence, it is safe to read without a mutex */
         if (G_num_thrds_complete>=args->thread_lim) break;
         else if (args->thread_num==0) G_num_thrds_complete = 0;
-
     }
 
     #ifdef DEBUG
