@@ -8,7 +8,7 @@
 #include <getopt.h>
 #include <time.h>
 
-#define DEBUG 1 
+#define DEBUG
 
 #ifdef _WIN32
     #define SLASH "\\"
@@ -34,13 +34,12 @@ double** G_utd_arr; // up-to-date array pointer
 
 void remove_spaces(char *str)
 {
-    // To keep track of non-space character count
     int count = 0;
-    // Traverse the provided string. If the current character is not a space,
-    //move it to index 'count++'.
+    /* traverse str If the current character is not a space,
+    move it to index count++ */
     for (int i = 0; str[i]; i++)
         if (str[i] != ' ')
-            str[count++] = str[i]; // here count is incremented
+            str[count++] = str[i];
     str[count] = '\0';
 }
 
@@ -63,7 +62,7 @@ void free_double_array(double** arr, uint16_t size) {
 
 // populate 2D array based on selected mode
 double** debug_populate_array(double** arr, uint16_t size, char mode) {
-    //srand(1);
+    srand(3);
     for (uint16_t i=0; i<size; i++) {
         for (uint16_t j=0; j<size; j++) {
             /* if at the top or left boundary, set value based on mode
@@ -127,7 +126,11 @@ double** copy_array(double** arr_a, double** arr_b, uint16_t size) {
     return arr_b;
 }
 
-// relaxation method function given to each thread
+/* /////////////////////////////////////////////////////////////////////////////
+   //                                                                         //
+   // Relax                                                                   //
+   //                                                                         //
+*/ /////////////////////////////////////////////////////////////////////////////
 void* avg(void* thrd_args) {
     #ifdef DEBUG
         int counter = 0;
@@ -145,8 +148,6 @@ void* avg(void* thrd_args) {
             // debug count of number of iterations thread 0 performs
             if (args->thread_num==0) counter++;
         #endif
-
-
         precision_met = true;
         // loop over rows thread will operate on
         for (uint16_t i=args->start_row; i<=args->end_row; i++) {
@@ -171,9 +172,19 @@ void* avg(void* thrd_args) {
         this marginally increases the work of thread 0 */
         if (args->thread_num==0) G_utd_arr = ro_arr; 
 
+
+
         /* synchronise all threads before incrementing the number of 
         complete threads */
-        //pthread_barrier_wait(args->barrier); 
+        pthread_barrier_wait(args->barrier); 
+
+        #ifdef DEBUG
+            /* debug print the current state of the array after threads  
+            synchronise */
+            if (args->thread_num==0) {
+                debug_display_array(G_utd_arr, args->size_mutable+2);
+            }
+        #endif
 
         /* one-by-one increment the count of complete threads if the
         precision has been met and the thread isn't already done*/
@@ -185,9 +196,9 @@ void* avg(void* thrd_args) {
 
         // synchronise threads again 
         pthread_barrier_wait(args->barrier);
-        /* this prevents threads leaving before others have reached the first 
-        barrier as well as stopping threads updaing the array before others are
-        done averaging
+        /* this primarily prevents the slowest thread leaving after the others
+        have reached the first barrier. Either barriers also stop threads 
+        updaing the array before others are done averaging
 
         when all threads have met precision, break out of the loop.
         Otherwise, complete threads will busy wait at barriers
@@ -200,7 +211,7 @@ void* avg(void* thrd_args) {
     }
 
     #ifdef DEBUG
-        if (args->thread_num==0) printf("counter: %d\n", counter);
+        if (args->thread_num==0) printf("iterations: %d\n", counter);
     #endif
 
     return 0;
