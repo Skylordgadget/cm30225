@@ -8,7 +8,7 @@
 #include <getopt.h>
 #include <time.h>
 
-#define DEBUG
+#undef DEBUG
 
 #ifdef _WIN32
     #define SLASH "\\"
@@ -323,8 +323,8 @@ int main (int argc, char **argv) {
     printf("mode %c\n", mode);
     
     snprintf(out_path, sizeof(out_path), \
-                "..%sout%sres_%dt_%ds_%fp.txt", \
-                    SLASH, SLASH, num_threads, size, precision);
+                ".%sres_%dt_%ds_%fp.txt", \
+                    SLASH, num_threads, size, precision);
 
     pthread_mutex_t thrds_complete_mlock = PTHREAD_MUTEX_INITIALIZER;
     pthread_barrier_t barrier;
@@ -427,7 +427,8 @@ int main (int argc, char **argv) {
         if (fpt == NULL) {
             perror("fopen");
         } else {
-            fprintf(fpt, "%d, %d, %f, %f\n", num_threads, size, time, precision);
+            fprintf(fpt, "%d, %d, %f, %f\n", \
+                num_threads, size, time, precision);
         }
     }
 

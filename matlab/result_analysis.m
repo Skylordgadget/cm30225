@@ -7,7 +7,7 @@ fpath = "../res/";
 % plt = surf(X,Y,Z);
 % set(plt, 'edgecolor', 'none')
 
-m = readtable(fpath + "ultra_test_10_2000_44t_g.csv");
+m = readtable(fpath + "ultra_test_10_2000_44t_r.csv");
 M = m{:,:};
 x = M(:,1);
 y = M(:,2);
@@ -18,12 +18,14 @@ xi = unique(x); yi = unique(y);
 Y = sortrows(Y);
 Z = reshape(z,size(X));
 Z = sortrows(Z);
-plt = surf(X,Y,Z);
+Z_log=log10(Z);
+plt = mesh(X,Y,Z);
 set(gca,'xlim',[1 44],'ylim',[10 2000]);
-set(plt, 'edgecolor', 'none')
+set(plt, 'facecolor', 'flat')
 xlabel("No. Threads");
 ylabel("Array Size");
 zlabel("Completion Time (Seconds)");
+title("Completion time for 1e-3 precision of 'r' dataset");
 
 % [X,Y] = meshgrid(1:0.5:10,1:20);
 % Z = sin(X) + cos(Y);

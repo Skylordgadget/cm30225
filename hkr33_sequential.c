@@ -7,8 +7,6 @@
 #include <getopt.h>
 #include <time.h>
 
-#define DEBUG 1
-
 #ifdef _WIN32
     #define SLASH "\\"
 #elif __linux__
@@ -112,10 +110,9 @@ double** copy_array(double** arr_a, double** arr_b, uint16_t size) {
 }
 
 void avg(double** old_arr, double** new_arr, uint16_t size_mutable, \
-            double precision) {
-    #ifdef DEBUG
-        int counter = 0;
-    #endif
+            double precision, bool verbose) {
+
+    int counter = 0;
 
     bool precision_met = false;
 
@@ -124,9 +121,7 @@ void avg(double** old_arr, double** new_arr, uint16_t size_mutable, \
     double** tmp_arr;
 
     while (true) {
-        #ifdef DEBUG
-            counter++;
-        #endif
+        counter++;
 
         precision_met = true;
         // loop over rows
@@ -151,9 +146,9 @@ void avg(double** old_arr, double** new_arr, uint16_t size_mutable, \
         if (precision_met) break;
     }
 
-    #ifdef DEBUG
-        printf("counter: %d\n", counter);
-    #endif
+    if (verbose) {
+        printf("iterations: %d\n", counter);
+    }
 }
 
 /* /////////////////////////////////////////////////////////////////////////////
