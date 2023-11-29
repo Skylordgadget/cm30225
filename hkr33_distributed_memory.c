@@ -37,21 +37,32 @@ void remove_spaces(char *str) {
     str[count] = '\0';
 }
 
-double** malloc_double_array(int size) {
-    // malloc for the pointers to each row
-    double** arr = (double**)malloc(size*sizeof(double*));
-    // malloc for each element in each row  
-    for (int i=0; i<size; i++) 
-        arr[i] = (double*)malloc(size*sizeof(double));
+int malloc2ddouble(double ***arr, int size) {
+    double *p = (double *)malloc(size*size*sizeof(double));
+    if (!p) return -1;
 
-    return arr;
+    /* allocate the row pointers into the memory */
+    (*arr) = (double **)malloc(size*sizeof(double*));
+    if (!(*arr)) {
+       free(p);
+       return -1;
+    }
+
+    /* set up the pointers into the contiguous memory */
+    for (int i=0; i<size; i++) 
+       (*arr)[i] = &(p[i*size]);
+
+    return 0;
 }
 
-void free_double_array(double** arr, int size) {
-    // free memory for each element in each row
-    for (int i=0; i<size; i++) free(arr[i]);
-    // free memory for the pointers to each row
-    free(arr);
+int free2ddouble(double ***arr) {
+    /* free the memory - the first element of the array is at the start */
+    free(&((*arr)[0][0]));
+
+    /* free the pointers into the memory */
+    free(*arr);
+
+    return 0;
 }
 
 // populate 2D array based on selected mode
@@ -158,6 +169,113 @@ MPI_Datatype create_tdata_type(){
     MPI_Type_create_struct(3, blocklen, disp, type, &tdata_type);
     MPI_Type_commit(&tdata_type);
     return tdata_type;
+}
+/* /////////////////////////////////////////////////////////////////////////////
+   //                                                                         //
+   // Relax                                                                   //
+   //                                                                         //
+*/ /////////////////////////////////////////////////////////////////////////////
+void avg(int rank, double** wr_arr, double** ro_arr, int start_row, \
+            int end_row, int thread_lim, int size, double precision) {
+
+    #ifdef DEBUG
+        int counter = 0;
+    #endif
+    MPI_Status stat;
+    int precision_met = 0;
+    double** tmp_arr;
+    double** utd_arr;
+    int size_mutable = size - 2;
+
+    for (int test = 0; test < 100; test++) {
+    // while (true) {
+        #ifdef DEBUG
+            // debug count of number of iterations thread 0 performs
+            if (rank==1) counter++;
+        #endif
+        precision_met = 1;
+        // loop over rows thread will operate on
+        for (int i=start_row; i<=end_row; i++) {
+            // loop over columns
+            for (int j=1; j<=size_mutable; j++) {
+                // add up surrounding four value and divide by four
+                wr_arr[i][j] = (ro_arr[i][j-1] + ro_arr[i][j+1] + \
+                                ro_arr[i-1][j] + ro_arr[i+1][j])/4.0;
+                /* precision_met starts as 1, if any element the thread is
+                working on has not met precision it will turn the 
+                variable 0, staying 0 until the next iteration */
+                precision_met &= \
+                    fabs(ro_arr[i][j] - wr_arr[i][j]) < precision;
+            }
+        }
+
+        
+        
+        if (rank != thread_lim) {
+            printf("I am thread: %d -- sending row %d to rank %d with tag %d\n\n", rank, end_row, rank+1, rank*10 + (rank+1) );
+            MPI_Send(&wr_arr[end_row][0], size, MPI_DOUBLE, rank+1, rank*10 + (rank+1), MPI_COMM_WORLD);      
+        }
+        if (rank != 1) {
+            printf("I am thread: %d -- sending row %d to rank %d with tag %d\n\n", rank, start_row, rank-1, rank*10 + (rank-1) );
+            MPI_Send(&wr_arr[start_row][0], size, MPI_DOUBLE, rank-1, rank*10 + (rank-1), MPI_COMM_WORLD);  
+        }
+        if (rank != thread_lim) {
+            printf("I am thread: %d -- receiving row %d from rank %d with tag %d\n\n", rank, end_row+1, rank+1, (rank+1)*10 + rank);
+            MPI_Recv(&wr_arr[end_row+1][0], size, MPI_DOUBLE, rank+1, (rank+1)*10 + rank, MPI_COMM_WORLD, &stat);
+        }
+        if (rank != 1) {
+            printf("I am thread: %d -- receiving row %d from rank %d with tag %d\n\n", rank, start_row-1, rank-1, (rank-1)*10 + rank);
+            MPI_Recv(&wr_arr[start_row-1][0], size, MPI_DOUBLE, rank-1, (rank-1)*10 + rank, MPI_COMM_WORLD, &stat);
+        }
+        // flip pointers
+        tmp_arr = ro_arr;
+        ro_arr = wr_arr;
+        wr_arr = tmp_arr;
+        /* on the first thread, keep track of the most up-to-date array
+        this marginally increases the work of thread 0 */
+        if (rank==1) utd_arr = ro_arr; 
+
+
+
+        /* synchronise all threads before incrementing the number of 
+        complete threads */
+        // pthread_barrier_wait(barrier); 
+
+        #ifdef DEBUG
+            /* debug print the current state of the array after threads  
+            synchronise */
+            if (rank==1) {
+                debug_display_array(utd_arr, size_mutable+2);
+            }
+        #endif
+
+        /* one-by-one increment the count of complete threads if the
+        precision has been met and the thread isn't already done*/
+        // if (precision_met) {
+        //     pthread_mutex_lock(threads_complete_mlock);
+        //         ++G_num_thrds_complete;
+        //     pthread_mutex_unlock(threads_complete_mlock);
+        // }
+
+        // synchronise threads again 
+        // pthread_barrier_wait(barrier);
+        /* this primarily prevents the slowest thread leaving after the others
+        have reached the first barrier. Either barriers also stop threads 
+        updaing the array before others are done averaging
+
+        when all threads have met precision, break out of the loop.
+        Otherwise, complete threads will busy wait at barriers
+        
+        Note that, this shared variable is not mutexed as it is only read after
+        threads synchronise at the second barrier and before threads synchronise 
+        at the first barrier, hence, it is safe to read without a mutex */
+        // if (G_num_thrds_complete>=thread_lim) break;
+        // else if (rank==0) G_num_thrds_complete = 0;
+    }
+
+    #ifdef DEBUG
+        if (rank==1) printf("iterations: %d\n", counter);
+    #endif
 }
 
 int main(int argc, char** argv){
@@ -280,7 +398,7 @@ int main(int argc, char** argv){
         size_mutable = size - 2; // array borders are not mutable
         /* if there are more threads than rows in the array,
         set thread_lim = size_mutable, otherwise thread_lim = num_threads */  
-        thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads-1;
+        thread_lim = (size_mutable < num_threads) ? size_mutable : num_threads;
         
         tdata.precision = precision;
         tdata.thread_lim = thread_lim;
@@ -292,14 +410,6 @@ int main(int argc, char** argv){
 
         int rows_per_thread_s = size_mutable / thread_lim;
         int rows_per_thread_l = rows_per_thread_s + 1;
-        
-        double** old_arr = malloc_double_array(size);
-        double** new_arr = malloc_double_array(size);
-        
-        old_arr = debug_populate_array(old_arr, size, mode);
-        new_arr = copy_array(old_arr, new_arr, size);
-        
-        if (print) debug_display_array(old_arr, size);
 
         trows.start_row = 0;
         trows.end_row = 0;
@@ -319,7 +429,8 @@ int main(int argc, char** argv){
             if (verbose) {
                 printf("thread %d, start row: %d | end row %d\n", i+1, trows.start_row, trows.end_row);
             }
-            MPI_Send(&trows, 1, trows_type, i+1, 99, MPI_COMM_WORLD);
+            if 
+            MPI_Send(&trows, 1, trows_type, i, 99, MPI_COMM_WORLD);
         }
 
         // clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
@@ -345,13 +456,12 @@ int main(int argc, char** argv){
         //     if (fpt == NULL) {
         //         perror("fopen");
         //     } else {
-        //         write_csv(G_utd_arr, size, fpt);
+        //         write_csv(utd_arr, size, fpt);
         //         fclose(fpt);
         //     }
         // }
 
-        free_double_array(old_arr, size);
-        free_double_array(new_arr, size);
+        
     //}
     } else {
         MPI_Status stat;
@@ -359,7 +469,30 @@ int main(int argc, char** argv){
         printf("I am thread: %d, my start row is %d, my end row is %d\n", process_Rank, trows.start_row, trows.end_row);
     }
     MPI_Bcast(&tdata, 1, tdata_type, ROOT, MPI_COMM_WORLD);
+    
+    double **new_arr;
+    malloc2ddouble(&new_arr, tdata.size);
+    double **old_arr;
+    malloc2ddouble(&old_arr, tdata.size);
+    
+    if (process_Rank == ROOT) {
+        old_arr = debug_populate_array(old_arr, tdata.size, '1');
+        new_arr = copy_array(old_arr, new_arr, tdata.size);
+        //debug_display_array(old_arr, tdata.size);
+    }
+
+    MPI_Bcast(&(new_arr[0][0]), tdata.size*tdata.size, MPI_DOUBLE, ROOT, MPI_COMM_WORLD);
+    MPI_Bcast(&(old_arr[0][0]), tdata.size*tdata.size, MPI_DOUBLE, ROOT, MPI_COMM_WORLD);
     printf("I am thread: %d | p: %f | t: %d | s: %d\n", process_Rank, tdata.precision, tdata.thread_lim, tdata.size);
+    // if (process_Rank == 2) {
+    //     debug_display_array(old_arr, tdata.size);
+    // }
+    if (process_Rank != ROOT) {
+        avg(process_Rank, new_arr, old_arr, trows.start_row, trows.end_row, tdata.thread_lim, tdata.size, tdata.precision);
+    }
+
+    free2ddouble(&old_arr);
+    free2ddouble(&new_arr);
     MPI_Finalize();
     return 0;
 }
