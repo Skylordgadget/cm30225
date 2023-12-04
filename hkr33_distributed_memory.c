@@ -125,7 +125,7 @@ double** copy_array(double** arr_a, double** arr_b, int size) {
    // Relax                                                                   //
    //                                                                         //
 */ /////////////////////////////////////////////////////////////////////////////
-double** avg(int rank, double** wr_arr, double** ro_arr, int start_row, \
+double** avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, int start_row, \
                 int end_row, int thread_lim, int size, double precision) {
 
     MPI_Status stat;
@@ -137,8 +137,6 @@ double** avg(int rank, double** wr_arr, double** ro_arr, int start_row, \
     double** utd_arr;
     int size_mutable = size - 2;
     int num_rows = end_row - start_row + 1;
-    double** res_arr = (double**)(0);
-    malloc2ddouble(&res_arr, (uint32_t)(size));
 
     while (true) {
         #ifdef DEBUG
@@ -368,11 +366,13 @@ int main(int argc, char** argv){
     malloc2ddouble(&wr_arr, (uint32_t)(size));
     double **ro_arr;
     malloc2ddouble(&ro_arr, (uint32_t)(size));
-    
+    double** res_arr;
+    malloc2ddouble(&res_arr, (uint32_t)(size));
+
     ro_arr = debug_populate_array(ro_arr, size, mode);
     wr_arr = copy_array(ro_arr, wr_arr, size);
     
-    wr_arr = avg(rank, wr_arr, ro_arr, start_row, end_row, thread_lim, size, precision);
+    wr_arr = avg(rank, wr_arr, ro_arr, res_arr, start_row, end_row, thread_lim, size, precision);
 
     if (rank==ROOT) {
         if (!(file_path==NULL)) {
@@ -391,6 +391,7 @@ int main(int argc, char** argv){
 
     free2ddouble(&ro_arr);
     free2ddouble(&wr_arr);
+    free2ddouble(&res_arr);
 
     MPI_Finalize();
     return 0;
