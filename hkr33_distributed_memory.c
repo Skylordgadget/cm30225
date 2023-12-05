@@ -27,35 +27,35 @@ void remove_spaces(char *str) {
     str[count] = '\0';
 }
 
-// allocate contiguous memory for a 2D array of doubles
-int malloc2ddouble(double ***arr, uint32_t size) {
-    double *p = (double *)malloc(size*size*sizeof(double));
-    if (!p) return -1;
+// // allocate contiguous memory for a 2D array of doubles
+// int malloc2ddouble(double ***arr, uint32_t size) {
+//     double *p = (double *)malloc(size*size*sizeof(double));
+//     if (!p) return -1;
 
-    // allocate the row pointers into the memory
-    (*arr) = (double **)malloc(size*sizeof(double*));
-    if (!(*arr)) {
-       free(p);
-       return -1;
-    }
+//     // allocate the row pointers into the memory
+//     (*arr) = (double **)malloc(size*sizeof(double*));
+//     if (!(*arr)) {
+//        free(p);
+//        return -1;
+//     }
 
-    // set up the pointers into the contiguous memory
-    for (uint32_t i=0; i<size; i++) 
-       (*arr)[i] = &(p[i*size]);
+//     // set up the pointers into the contiguous memory
+//     for (uint32_t i=0; i<size; i++) 
+//        (*arr)[i] = &(p[i*size]);
 
-    return 0;
-}
+//     return 0;
+// }
 
-// free memory allocated for a 2D array of doubles
-int free2ddouble(double ***arr) {
-    // free the memory - the first element of the array is at the start
-    free(&((*arr)[0][0]));
+// // free memory allocated for a 2D array of doubles
+// int free2ddouble(double ***arr) {
+//     // free the memory - the first element of the array is at the start
+//     free(&((*arr)[0][0]));
 
-    // free the pointers into the memory
-    free(*arr);
+//     // free the pointers into the memory
+//     free(*arr);
 
-    return 0;
-}
+//     return 0;
+// }
 
 // populate 2D array based on selected mode
 double** debug_populate_array(double** arr, int size, char mode) {
@@ -416,12 +416,16 @@ int main(int argc, char** argv){
                             my end row is %d\n", rank, start_row, end_row);
 
     // allocate memory for wr_arr/ro_arr/res_arr
-    double **wr_arr;
-    malloc2ddouble(&wr_arr, (uint32_t)(size));
-    double **ro_arr;
-    malloc2ddouble(&ro_arr, (uint32_t)(size));
-    double** res_arr;
-    malloc2ddouble(&res_arr, (uint32_t)(size));
+    // double **wr_arr;
+    // malloc2ddouble(&wr_arr, (uint32_t)(size));
+    // double **ro_arr;
+    // malloc2ddouble(&ro_arr, (uint32_t)(size));
+    // double** res_arr;
+    // malloc2ddouble(&res_arr, (uint32_t)(size));
+
+    double (*wr_arr)[size] = malloc(sizeof *wr_arr * size);
+    double (*ro_arr)[size] = malloc(sizeof *ro_arr * size);
+    double (*res_arr)[size] = malloc(sizeof *res_arr * size);
 
     // populate ro_arr and copy it's contents to wr_arr/res_arr
     ro_arr = debug_populate_array(ro_arr, size, mode);
@@ -452,9 +456,13 @@ int main(int argc, char** argv){
     }
 
     // free the allocated memory for ro_arr/wr_arr/res_arr
-    free2ddouble(&ro_arr);
-    free2ddouble(&wr_arr);
-    free2ddouble(&res_arr);
+    // free2ddouble(&ro_arr);
+    // free2ddouble(&wr_arr);
+    // free2ddouble(&res_arr);
+
+    free(wr_arr);
+    free(ro_arr);
+    free(res_arr);
 
     MPI_Finalize();
     return 0;
