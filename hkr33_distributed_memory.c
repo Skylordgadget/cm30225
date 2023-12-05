@@ -143,9 +143,9 @@ double* copy_array(double* arr_a, double* arr_b, int size) {
     size:       width and height of wr_arr/ro_arr/res_arr
     precision:  precision to which the relaxtion is calculated to
 */
-void avg(int rank, double* wr_arr, double* ro_arr, double* res_arr, \
-            int start_row, int end_row, int thread_lim, int size, \
-            double precision) {
+double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
+            int end_row, int thread_lim, int size, double precision) {
+
     MPI_Status stat;
     #ifdef DEBUG
         int counter = 0;
@@ -154,7 +154,6 @@ void avg(int rank, double* wr_arr, double* ro_arr, double* res_arr, \
     double* tmp_arr;
     double* utd_arr;
     int size_mutable = size - 2;
-    int num_rows = end_row - start_row + 1;
     
     while (true) {
         #ifdef DEBUG
@@ -246,14 +245,11 @@ void avg(int rank, double* wr_arr, double* ro_arr, double* res_arr, \
         if (precision_met_all) break;
     }
 
-    // gather all rows from the most up-to-date array and store them in res_arr
-    MPI_Gather(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
-                &res_arr[size], size*num_rows, MPI_DOUBLE, \
-                ROOT, MPI_COMM_WORLD);
-
     #ifdef DEBUG
         if (rank==ROOT) printf("iterations: %d\n", counter);
     #endif
+    
+    return utd_arr;
 }
 
 /* /////////////////////////////////////////////////////////////////////////////
@@ -411,6 +407,8 @@ int main(int argc, char** argv){
     }
     // =========================================================================
 
+    int num_rows = end_row - start_row + 1;
+
     if (verbose) printf("I am thread: %d, my start row is %d, \
                             my end row is %d\n", rank, start_row, end_row);
 
@@ -436,9 +434,14 @@ int main(int argc, char** argv){
     
     /* =========================================================================
     relax the data */
-    avg(rank, wr_arr, ro_arr, res_arr, start_row, end_row, thread_lim, size, \
-            precision);
+    double *utd_arr = avg(rank, wr_arr, ro_arr, start_row, end_row, thread_lim, size, \
+                            precision);
     // =========================================================================
+
+    // gather all rows from the most up-to-date array and store them in res_arr
+    MPI_Gather(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
+                &res_arr[size], size*num_rows, MPI_DOUBLE, \
+                ROOT, MPI_COMM_WORLD);
 
     /* If a file path has been specified, write the contents of res_arr to it.
     Only do this sequentially on the root thread.*/
