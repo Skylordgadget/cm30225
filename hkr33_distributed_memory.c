@@ -425,12 +425,15 @@ int main(int argc, char** argv){
 
     double *wr_arr = malloc(sizeof *wr_arr * (uint32_t)(size * size));
     double *ro_arr = malloc(sizeof *ro_arr * (uint32_t)(size * size));
-    double *res_arr = malloc(sizeof *res_arr * (uint32_t)(size * size));
+    double *res_arr = (double*)(-1);
+    if (rank==ROOT)
+        res_arr = malloc(sizeof *res_arr * (uint32_t)(size * size));
 
     // populate ro_arr and copy it's contents to wr_arr/res_arr
     ro_arr = debug_populate_array(ro_arr, size, mode);
     wr_arr = copy_array(ro_arr, wr_arr, size);
-    res_arr = copy_array(ro_arr, res_arr, size);
+    if (rank==ROOT)
+        res_arr = copy_array(ro_arr, res_arr, size);
     
     /* =========================================================================
     relax the data */
@@ -462,7 +465,8 @@ int main(int argc, char** argv){
 
     free(wr_arr);
     free(ro_arr);
-    free(res_arr);
+    if (rank==ROOT)
+        free(res_arr);
 
     MPI_Finalize();
     return 0;
