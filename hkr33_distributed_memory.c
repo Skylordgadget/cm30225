@@ -247,14 +247,13 @@ void avg(int rank, double* wr_arr, double* ro_arr, double* res_arr, \
     }
 
     // gather all rows from the most up-to-date array and store them in res_arr
-    MPI_Gather(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
-                &res_arr[size], size*num_rows, MPI_DOUBLE, \
-                ROOT, MPI_COMM_WORLD);
+    // MPI_Gather(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
+    //             &res_arr[size], size*num_rows, MPI_DOUBLE, \
+    //             ROOT, MPI_COMM_WORLD);
 
     #ifdef DEBUG
         if (rank==ROOT) printf("iterations: %d\n", counter);
     #endif
-    
 }
 
 /* /////////////////////////////////////////////////////////////////////////////
