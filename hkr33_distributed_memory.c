@@ -58,7 +58,7 @@ void remove_spaces(char *str) {
 // }
 
 // populate 2D array based on selected mode
-double** debug_populate_array(double** arr, int size, char mode) {
+double* debug_populate_array(double* arr, int size, char mode) {
     srand(3); // seed for random numbers
     for (int i=0; i<size; i++) {
         for (int j=0; j<size; j++) {
@@ -67,26 +67,26 @@ double** debug_populate_array(double** arr, int size, char mode) {
             
             switch(mode) {
                 case '1': // 1s along the top and left, 0s everywhere else
-                    if (i==0 || j == 0) arr[i][j] = 1.0; 
-                    else arr[i][j] = 0.0;
+                    if (i==0 || j == 0) arr[i * size + j] = 1.0; 
+                    else arr[i * size + j] = 0.0;
                     break;
                 case 'r': // random numbers between 0 and 9 on the borders
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
-                        arr[i][j] = (double)(rand() % 10);
-                    else arr[i][j] = 0.0;
+                        arr[i * size + j] = (double)(rand() % 10);
+                    else arr[i * size + j] = 0.0;
                     break;
                 case 'q': // random numbers between 0 and 9 for every element
-                    arr[i][j] = (double)(rand() % 10);
+                    arr[i * size + j] = (double)(rand() % 10);
                     break;
                 case 'u': // on the borders, each element = x_idx*y_idx else 0s 
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
-                        arr[i][j] = (double)(i*j);
-                    else arr[i][j] = 0.0;
+                        arr[i * size + j] = (double)(i*j);
+                    else arr[i * size + j] = 0.0;
                     break;
                 case 'g':
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
-                        arr[i][j] = 1.0;
-                    else arr[i][j] = (double)(rand() % 10);
+                        arr[i * size + j] = 1.0;
+                    else arr[i * size + j] = (double)(rand() % 10);
                     break;
                 default: // 0s everywhere
                     printf("mode %c unrecognised", mode);
@@ -99,27 +99,27 @@ double** debug_populate_array(double** arr, int size, char mode) {
 }
 
 // print contents of 2D array
-void debug_display_array(double** arr, int size) {
+void debug_display_array(double* arr, int size) {
     for (int i=0; i<size; i++) { 
-        for (int j=0; j<size; j++) printf("%.12f ", arr[i][j]);
+        for (int j=0; j<size; j++) printf("%.12f ", arr[i * size + j]);
         printf("\n");
     }
     printf("\n");
 }
 
 // take 2D array and write contents into file using a file pointer
-void write_csv(double** arr, int size, FILE* fpt) {
+void write_csv(double* arr, int size, FILE* fpt) {
     for (int i=0; i<size; i++) { 
-        for (int j=0; j<size; j++) fprintf(fpt, "%.12f,", arr[i][j]);
+        for (int j=0; j<size; j++) fprintf(fpt, "%.12f,", arr[i * size + j]);
         fprintf(fpt, "\n");
     }
     fprintf(fpt, "\n");
 }
 
 // duplicate contents of 2D array arr_a into arr_b
-double** copy_array(double** arr_a, double** arr_b, int size) {
+double* copy_array(double* arr_a, double* arr_b, int size) {
     for (int i=0; i<size; i++)  
-        for (int j=0; j<size; j++) arr_b[i][j] = arr_a[i][j];
+        for (int j=0; j<size; j++) arr_b[i * size + j] = arr_a[i * size + j];
     return arr_b;
 }
 
@@ -143,7 +143,7 @@ double** copy_array(double** arr_a, double** arr_b, int size) {
     size:       width and height of wr_arr/ro_arr/res_arr
     precision:  precision to which the relaxtion is calculated to
 */
-void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
+void avg(int rank, double* wr_arr, double* ro_arr, double* res_arr, \
             int start_row, int end_row, int thread_lim, int size, \
             double precision) {
     MPI_Status stat;
@@ -151,8 +151,8 @@ void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
         int counter = 0;
     #endif
     int precision_met = 0;
-    double** tmp_arr;
-    double** utd_arr;
+    double* tmp_arr;
+    double* utd_arr;
     int size_mutable = size - 2;
     int num_rows = end_row - start_row + 1;
     
@@ -167,13 +167,13 @@ void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
             // loop over columns
             for (int j=1; j<=size_mutable; j++) {
                 // add up surrounding four value and divide by four
-                wr_arr[i][j] = (ro_arr[i][j-1] + ro_arr[i][j+1] + \
-                                ro_arr[i-1][j] + ro_arr[i+1][j])/4.0;             
+                wr_arr[i * size + j] = (ro_arr[i * size + (j-1)] + ro_arr[i * size + (j+1)] + \
+                                ro_arr[(i-1) * size + j] + ro_arr[(i+1) * size + j])/4.0;             
                 /* precision_met starts as 1, if any element the thread is
                 working on has not met precision it will turn the 
                 variable 0, staying 0 until the next iteration */
                 precision_met &= \
-                    fabs(ro_arr[i][j] - wr_arr[i][j]) < precision;
+                    fabs(ro_arr[i * size + j] - wr_arr[i * size + j]) < precision;
             }
         } 
 
@@ -197,7 +197,7 @@ void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
                             %d\n\n", rank, end_row, rank+1, rank*10+(rank+1));
             #endif
             // send bottom row to next rank
-            MPI_Send(&wr_arr[end_row][0], size, MPI_DOUBLE, rank+1, \
+            MPI_Send(&wr_arr[end_row * size], size, MPI_DOUBLE, rank+1, \
                         rank*10 + (rank+1), MPI_COMM_WORLD);      
         }
         if (rank != ROOT) {
@@ -206,7 +206,7 @@ void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
                             %d\n\n", rank, start_row, rank-1, rank*10+(rank-1));
             #endif
             // send top row to previous rank
-            MPI_Send(&wr_arr[start_row][0], size, MPI_DOUBLE, rank-1, \
+            MPI_Send(&wr_arr[start_row * size], size, MPI_DOUBLE, rank-1, \
                         rank*10 + (rank-1), MPI_COMM_WORLD);  
         }
         if (rank != thread_lim-1) {
@@ -216,7 +216,7 @@ void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
                             (rank+1)*10+rank);
             #endif
             // receive bottom row + 1 from next rank 
-            MPI_Recv(&wr_arr[end_row+1][0], size, MPI_DOUBLE, rank+1, \
+            MPI_Recv(&wr_arr[(end_row+1) * size], size, MPI_DOUBLE, rank+1, \
                         (rank+1)*10 + rank, MPI_COMM_WORLD, &stat);
         }
         if (rank != ROOT) {
@@ -226,7 +226,7 @@ void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
                         (rank-1)*10 + rank);
             #endif
             // receive top row + 1 from previous rank
-            MPI_Recv(&wr_arr[start_row-1][0], size, MPI_DOUBLE, rank-1, \
+            MPI_Recv(&wr_arr[(start_row-1) * size], size, MPI_DOUBLE, rank-1, \
                         (rank-1)*10 + rank, MPI_COMM_WORLD, &stat);
         }
         // flip pointers
@@ -247,8 +247,8 @@ void avg(int rank, double** wr_arr, double** ro_arr, double** res_arr, \
     }
 
     // gather all rows from the most up-to-date array and store them in res_arr
-    MPI_Gather(&utd_arr[start_row][0], size*num_rows, MPI_DOUBLE, \
-                &res_arr[1][0], size*num_rows, MPI_DOUBLE, \
+    MPI_Gather(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
+                &res_arr[size], size*num_rows, MPI_DOUBLE, \
                 ROOT, MPI_COMM_WORLD);
 
     #ifdef DEBUG
@@ -423,9 +423,9 @@ int main(int argc, char** argv){
     // double** res_arr;
     // malloc2ddouble(&res_arr, (uint32_t)(size));
 
-    double (*wr_arr)[size] = malloc(sizeof *wr_arr * size);
-    double (*ro_arr)[size] = malloc(sizeof *ro_arr * size);
-    double (*res_arr)[size] = malloc(sizeof *res_arr * size);
+    double *wr_arr = malloc(sizeof *wr_arr * (uint32_t)(size * size));
+    double *ro_arr = malloc(sizeof *ro_arr * (uint32_t)(size * size));
+    double *res_arr = malloc(sizeof *res_arr * (uint32_t)(size * size));
 
     // populate ro_arr and copy it's contents to wr_arr/res_arr
     ro_arr = debug_populate_array(ro_arr, size, mode);
