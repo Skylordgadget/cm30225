@@ -405,6 +405,22 @@ int main(int argc, char** argv){
         end_row = rows_per_thread_l*threads_l + \
                         (rank-threads_l+1)*rows_per_thread_s;
     }
+
+    int displs[thread_lim];
+    int rcounts[thread_lim]; 
+
+    if (rank==ROOT) {
+        int i;
+        for (i=0; i<threads_l; i++) {
+            rcounts[i] = rows_per_thread_l*size;
+            displs[i] = i > 0 ? displs[i-1] + rcounts[i-1] : 0; 
+        }
+        for (; i<thread_lim; i++) {
+            rcounts[i] = rows_per_thread_s*size;
+            displs[i] = i > 0 ? displs[i-1] + rcounts[i-1] : 0; 
+        }        
+    }
+
     // =========================================================================
 
     int num_rows = end_row - start_row + 1;
@@ -439,9 +455,9 @@ int main(int argc, char** argv){
     // =========================================================================
 
     // gather all rows from the most up-to-date array and store them in res_arr
-    MPI_Gather(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
-                &res_arr[size], size*num_rows, MPI_DOUBLE, \
-                ROOT, MPI_COMM_WORLD);
+    MPI_Gatherv(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
+                    &res_arr[size], rcounts, displs, MPI_DOUBLE, \
+                    ROOT, MPI_COMM_WORLD);
 
     /* If a file path has been specified, write the contents of res_arr to it.
     Only do this sequentially on the root thread.*/
