@@ -428,11 +428,24 @@ int main(int argc, char** argv){
     if (rank==ROOT)
         res_arr = copy_array(ro_arr, res_arr, size);
     
+    struct timespec timer_start, timer_end;
+    
+
+    clock_gettime(CLOCK_REALTIME, &timer_start); // start timing code here
     /* =========================================================================
     relax the data */
-    double *utd_arr = avg(rank, wr_arr, ro_arr, start_row, end_row, thread_lim, size, \
-                            precision);
+    double *utd_arr = avg(rank, wr_arr, ro_arr, start_row, end_row, \
+                            thread_lim, size, precision);
     // =========================================================================
+    clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
+    double time = (double)(timer_end.tv_sec - timer_start.tv_sec) 
+                + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9);
+
+    double slowest_time; 
+    MPI_Reduce(&time, &slowest_time, 1, MPI_DOUBLE, MPI_MAX, \
+                    ROOT, MPI_COMM_WORLD);
+
+    if (rank==ROOT) printf("Relaxed in %fs\n", slowest_time);
 
     // gather all rows from the most up-to-date array and store them in res_arr
     MPI_Gatherv(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
