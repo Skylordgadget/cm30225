@@ -27,37 +27,7 @@ void remove_spaces(char *str) {
     str[count] = '\0';
 }
 
-// // allocate contiguous memory for a 2D array of doubles
-// int malloc2ddouble(double ***arr, uint32_t size) {
-//     double *p = (double *)malloc(size*size*sizeof(double));
-//     if (!p) return -1;
-
-//     // allocate the row pointers into the memory
-//     (*arr) = (double **)malloc(size*sizeof(double*));
-//     if (!(*arr)) {
-//        free(p);
-//        return -1;
-//     }
-
-//     // set up the pointers into the contiguous memory
-//     for (uint32_t i=0; i<size; i++) 
-//        (*arr)[i] = &(p[i*size]);
-
-//     return 0;
-// }
-
-// // free memory allocated for a 2D array of doubles
-// int free2ddouble(double ***arr) {
-//     // free the memory - the first element of the array is at the start
-//     free(&((*arr)[0][0]));
-
-//     // free the pointers into the memory
-//     free(*arr);
-
-//     return 0;
-// }
-
-// populate 2D array based on selected mode
+// populate array based on selected mode
 double* debug_populate_array(double* arr, int size, char mode) {
     srand(3); // seed for random numbers
     for (int i=0; i<size; i++) {
@@ -98,7 +68,7 @@ double* debug_populate_array(double* arr, int size, char mode) {
     return arr;
 }
 
-// print contents of 2D array
+// print contents of array
 void debug_display_array(double* arr, int size) {
     for (int i=0; i<size; i++) { 
         for (int j=0; j<size; j++) printf("%.12f ", arr[i * size + j]);
@@ -107,7 +77,7 @@ void debug_display_array(double* arr, int size) {
     printf("\n");
 }
 
-// take 2D array and write contents into file using a file pointer
+// take array and write contents into file using a file pointer
 void write_csv(double* arr, int size, FILE* fpt) {
     for (int i=0; i<size; i++) { 
         for (int j=0; j<size; j++) fprintf(fpt, "%.12f,", arr[i * size + j]);
@@ -116,7 +86,7 @@ void write_csv(double* arr, int size, FILE* fpt) {
     fprintf(fpt, "\n");
 }
 
-// duplicate contents of 2D array arr_a into arr_b
+// duplicate contents of array arr_a into arr_b
 double* copy_array(double* arr_a, double* arr_b, int size) {
     for (int i=0; i<size; i++)  
         for (int j=0; j<size; j++) arr_b[i * size + j] = arr_a[i * size + j];
@@ -134,8 +104,8 @@ double* copy_array(double* arr_a, double* arr_b, int size) {
     to within a given precision. 
 
     rank:       process rank of each MPI thread
-    wr_arr:     2D array written to by threads whilst relaxing
-    ro_arr:     2D array read from by threads whilst relaxing
+    wr_arr:     array written to by threads whilst relaxing
+    ro_arr:     array read from by threads whilst relaxing
     res_arr:    final result of relaxation
     start_row:  index in ro_arr/wr_arr that each thread starts relaxing from
     end_row:    index in ro_arr/wr_arr that each thread stops relaxing at
@@ -405,7 +375,15 @@ int main(int argc, char** argv){
         end_row = rows_per_thread_l*threads_l + \
                         (rank-threads_l+1)*rows_per_thread_s;
     }
+    // =========================================================================
 
+    /* ========================================================================= 
+    Set up the receive counts and displacements for the MPI_Gatherv function
+    rcounts[i] = number of doubles receieved from rank=i
+    
+    displs[i] = running total of rcounts offset by 1 index, tells MPI_Gatherv 
+    how to properly align the received data in the receive buffer
+    */
     int displs[thread_lim];
     int rcounts[thread_lim]; 
 
@@ -420,25 +398,27 @@ int main(int argc, char** argv){
             displs[i] = i > 0 ? displs[i-1] + rcounts[i-1] : 0; 
         }        
     }
-
     // =========================================================================
-
+    
     int num_rows = end_row - start_row + 1;
 
     if (verbose) printf("I am thread: %d, my start row is %d, \
                             my end row is %d\n", rank, start_row, end_row);
 
-    // allocate memory for wr_arr/ro_arr/res_arr
-    // double **wr_arr;
-    // malloc2ddouble(&wr_arr, (uint32_t)(size));
-    // double **ro_arr;
-    // malloc2ddouble(&ro_arr, (uint32_t)(size));
-    // double** res_arr;
-    // malloc2ddouble(&res_arr, (uint32_t)(size));
+    /* allocate memory for wr_arr/ro_arr on every thread
 
+    note that: I am almost always allocating an unnecessary amount of memory 
+    per thread doing this. For really large arrays with a decent number of 
+    threads, only a fraction of the memory is acutally manipulated.
+    This is really really terrible and may be improved by allocating only what 
+    each thread *needs* but this adds complexity that I don't have time to worry 
+    about since the memory usage is not the focus of this assignment. 
+    
+    TODO fix that */
     double *wr_arr = malloc(sizeof *wr_arr * (uint32_t)(size * size));
     double *ro_arr = malloc(sizeof *ro_arr * (uint32_t)(size * size));
     double *res_arr = (double*)(-1);
+    // only allocate memory for res_arr on the root thread
     if (rank==ROOT)
         res_arr = malloc(sizeof *res_arr * (uint32_t)(size * size));
 
@@ -475,11 +455,6 @@ int main(int argc, char** argv){
 
         if (print) debug_display_array(res_arr, size);
     }
-
-    // free the allocated memory for ro_arr/wr_arr/res_arr
-    // free2ddouble(&ro_arr);
-    // free2ddouble(&wr_arr);
-    // free2ddouble(&res_arr);
 
     free(wr_arr);
     free(ro_arr);
