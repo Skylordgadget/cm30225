@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#undef DEBUG // define to enable extra printed debug info
+#define DEBUG // define to enable extra printed debug info
 #define ROOT 0 // MPI root process
 
 #ifdef _WIN32
@@ -48,12 +48,17 @@ double* debug_populate_array(double* arr, int size, char mode) {
                 case 'q': // random numbers between 0 and 9 for every element
                     arr[i * size + j] = (double)(rand() % 10);
                     break;
-                case 'u': // on the borders, each element = x_idx*y_idx else 0s 
+                case 'm': // on the borders, each element = x_idx*y_idx else 0s 
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
                         arr[i * size + j] = (double)(i*j);
                     else arr[i * size + j] = 0.0;
                     break;
-                case 'g':
+                case 'a': // on the borders, each element = x_idx+y_idx else 0s 
+                    if (i == 0 || j == 0 || i == size-1 || j == size-1) 
+                        arr[i * size + j] = (double)(i+j);
+                    else arr[i * size + j] = 0.0;
+                    break;
+                case 'g': // 1s on the borders random numbers bettween 0 and 9 in the middle
                     if (i == 0 || j == 0 || i == size-1 || j == size-1) 
                         arr[i * size + j] = 1.0;
                     else arr[i * size + j] = (double)(rand() % 10);
@@ -114,7 +119,8 @@ double* copy_array(double* arr_a, double* arr_b, int size) {
     precision:  precision to which the relaxtion is calculated to
 */
 double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
-            int end_row, int thread_lim, int size, double precision) {
+            int end_row, int thread_lim, int size, double precision, \
+            int verbose) {
 
     MPI_Status stat;
     #ifdef DEBUG
@@ -162,8 +168,10 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
         */
         if (rank != thread_lim-1) {
             #ifdef DEBUG
+            if (verbose) {
                 printf("I am thread: %d -- sending row %d to rank %d with tag \
                             %d\n\n", rank, end_row, rank+1, rank*10+(rank+1));
+            }
             #endif
             // send bottom row to next rank
             MPI_Send(&wr_arr[end_row * size], size, MPI_DOUBLE, rank+1, \
@@ -171,8 +179,10 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
         }
         if (rank != ROOT) {
             #ifdef DEBUG
+            if (verbose) {
                 printf("I am thread: %d -- sending row %d to rank %d with tag \
                             %d\n\n", rank, start_row, rank-1, rank*10+(rank-1));
+            }
             #endif
             // send top row to previous rank
             MPI_Send(&wr_arr[start_row * size], size, MPI_DOUBLE, rank-1, \
@@ -180,9 +190,11 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
         }
         if (rank != thread_lim-1) {
             #ifdef DEBUG
+            if (verbose) {
                 printf("I am thread: %d -- receiving row %d from rank %d \
                             with tag %d\n\n", rank, end_row+1, rank+1, \
                             (rank+1)*10+rank);
+            }
             #endif
             // receive bottom row + 1 from next rank 
             MPI_Recv(&wr_arr[(end_row+1) * size], size, MPI_DOUBLE, rank+1, \
@@ -190,9 +202,11 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
         }
         if (rank != ROOT) {
             #ifdef DEBUG
+            if (verbose) {
                 printf("I am thread: %d -- receiving row %d from rank %d \
                         with tag %d\n\n", rank, start_row-1, rank-1, \
                         (rank-1)*10 + rank);
+            }
             #endif
             // receive top row + 1 from previous rank
             MPI_Recv(&wr_arr[(start_row-1) * size], size, MPI_DOUBLE, rank-1, \
@@ -399,8 +413,6 @@ int main(int argc, char** argv){
         }        
     }
     // =========================================================================
-    
-    int num_rows = end_row - start_row + 1;
 
     if (verbose) printf("I am thread: %d, my start row is %d, \
                             my end row is %d\n", rank, start_row, end_row);
@@ -412,9 +424,7 @@ int main(int argc, char** argv){
     threads, only a fraction of the memory is acutally manipulated.
     This is really really terrible and may be improved by allocating only what 
     each thread *needs* but this adds complexity that I don't have time to worry 
-    about since the memory usage is not the focus of this assignment. 
-    
-    TODO fix that */
+    about since the memory usage is not the focus of this assignment. */
     double *wr_arr = malloc(sizeof *wr_arr * (uint32_t)(size * size));
     double *ro_arr = malloc(sizeof *ro_arr * (uint32_t)(size * size));
     double *res_arr = (double*)(-1);
@@ -435,11 +445,11 @@ int main(int argc, char** argv){
     /* =========================================================================
     relax the data */
     double *utd_arr = avg(rank, wr_arr, ro_arr, start_row, end_row, \
-                            thread_lim, size, precision);
+                            thread_lim, size, precision, verbose);
     // =========================================================================
     clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
     double time = (double)(timer_end.tv_sec - timer_start.tv_sec) 
-                + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9);
+                    + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9);
 
     double slowest_time; 
     MPI_Reduce(&time, &slowest_time, 1, MPI_DOUBLE, MPI_MAX, \
@@ -447,6 +457,7 @@ int main(int argc, char** argv){
 
     if (rank==ROOT) printf("Relaxed in %fs\n", slowest_time);
 
+    int num_rows = end_row - start_row + 1;
     // gather all rows from the most up-to-date array and store them in res_arr
     MPI_Gatherv(&utd_arr[start_row * size], size*num_rows, MPI_DOUBLE, \
                     &res_arr[size], rcounts, displs, MPI_DOUBLE, \
