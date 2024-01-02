@@ -153,7 +153,7 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
         } 
 
         /* Exchange start and end rows of adjacent threads.
-        This is a slow operation -- likely dominating execution time
+        This is a slow operation--likely dominating execution time
         
         rank != thread_lim-1:
             prevent top/bottom thread from trying to send to a thread that's 
@@ -163,9 +163,8 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             out of bounds
 
         Both sends are carried out before both receives to prevent a deadlock
-        where a blocking receive may be called before its companion send,
-        thus blocking forever.   
-        */
+        where a blocking receive may be called before it's companion send,
+        thus blocking forever. */
         if (rank != thread_lim-1) {
             #ifdef DEBUG
             if (verbose) {

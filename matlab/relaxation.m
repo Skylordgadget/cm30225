@@ -1,10 +1,10 @@
 clear; clc;
 
-m = readtable("..\build\test.csv");
+m = readtable("..\res\res_10t_1000s_1e-5p_1m.csv");
 test = m{:,:};
 
-precision = 1e-3;
-size = 10;
+precision = 1e-5;
+size = 1000;
 % set initial array
 % arr_a = [1 1 1 1 1;
 %          1 8 6 4 1;
