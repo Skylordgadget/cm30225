@@ -137,8 +137,8 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
     int size_mutable = size - 2;
     int num_rows = end_row - start_row + 1;
     int i = 0;
-    // MPI_Request start_request;
-    // MPI_Request end_request;
+    MPI_Request start_request;
+    MPI_Request end_request;
     while (true) {
         #ifdef DEBUG
             // debug count of number of iterations thread 0 performs
@@ -192,12 +192,9 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                     }
                     #endif
                     // send top row to previous rank
-                    // ret = MPI_Isend(&wr_arr[start_row * size], size, \
-                    //         MPI_DOUBLE, rank-1, rank*10 + (rank-1), \
-                    //         MPI_COMM_WORLD, &start_request);  
-                    ret = MPI_Send(&wr_arr[start_row * size], size, \
+                    ret = MPI_Isend(&wr_arr[start_row * size], size, \
                             MPI_DOUBLE, rank-1, rank*10 + (rank-1), \
-                            MPI_COMM_WORLD);  
+                            MPI_COMM_WORLD, &start_request);  
                     if (ret != 0) { // check return code
                         printf("MPI Error. Code: %d (MPI_Isend)\n", ret);
                         exit(1);
@@ -214,12 +211,9 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                     }
                     #endif
                     // send bottom row to next rank
-                    // ret = MPI_Isend(&wr_arr[end_row * size], size, \
-                    //         MPI_DOUBLE, rank+1, rank*10 + (rank+1), \
-                    //         MPI_COMM_WORLD, &end_request);  
-                    ret = MPI_Send(&wr_arr[end_row * size], size, \
+                    ret = MPI_Isend(&wr_arr[end_row * size], size, \
                             MPI_DOUBLE, rank+1, rank*10 + (rank+1), \
-                            MPI_COMM_WORLD);  
+                            MPI_COMM_WORLD, &end_request);  
                     if (ret != 0) { // check return code 
                         printf("MPI Error. Code: %d (MPI_Isend)\n", ret);
                         exit(1);
@@ -228,26 +222,7 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             }
         } 
     
-        // if (rank != thread_lim-1) {
-        //     #ifdef DEBUG
-        //     if (verbose) printf("Rank %d waiting to send end_row\n", rank);
-        //     #endif
-        //     ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
-        //     if (ret != 0) { // check return code
-        //         printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-        //         exit(1);
-        //     }   
-        // }
-        // if (rank != ROOT) {
-        //     #ifdef DEBUG
-        //     if (verbose) printf("Rank %d waiting to send start_row\n", rank);
-        //     #endif
-        //     ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
-        //     if (ret != 0) { // check return code
-        //         printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-        //         exit(1);
-        //     }  
-        // }
+
 
         /* Receive start and end rows of adjacent threads.
         This is a slow operation--likely dominating execution time for small 
@@ -261,8 +236,8 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             }
             #endif
             // receive bottom row + 1 from next rank 
-            ret = MPI_Recv(&wr_arr[(end_row+1) * size], size, MPI_DOUBLE, \
-                    rank+1, (rank+1)*10 + rank, MPI_COMM_WORLD, &stat);
+            ret = MPI_Irecv(&wr_arr[(end_row+1) * size], size, MPI_DOUBLE, \
+                    rank+1, (rank+1)*10 + rank, MPI_COMM_WORLD, &end_request);
             if (ret != 0) { // check return code
                 printf("MPI Error. Code: %d (MPI_Recv)\n", ret);
                 exit(1);
@@ -277,13 +252,35 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             }
             #endif
             // receive top row + 1 from previous rank
-            ret = MPI_Recv(&wr_arr[(start_row-1) * size], size, MPI_DOUBLE, \
-                    rank-1, (rank-1)*10 + rank, MPI_COMM_WORLD, &stat);
+            ret = MPI_Irecv(&wr_arr[(start_row-1) * size], size, MPI_DOUBLE, \
+                    rank-1, (rank-1)*10 + rank, MPI_COMM_WORLD, &start_request);
             if (ret != 0) { // check return code
                 printf("MPI Error. Code: %d (MPI_Recv)\n", ret);
                 exit(1);
             }  
         }
+
+        if (rank != thread_lim-1) {
+            #ifdef DEBUG
+            if (verbose) printf("Rank %d waiting to send end_row\n", rank);
+            #endif
+            ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
+            if (ret != 0) { // check return code
+                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
+                exit(1);
+            }   
+        }
+        if (rank != ROOT) {
+            #ifdef DEBUG
+            if (verbose) printf("Rank %d waiting to send start_row\n", rank);
+            #endif
+            ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
+            if (ret != 0) { // check return code
+                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
+                exit(1);
+            }  
+        }
+
         // flip pointers
         tmp_arr = ro_arr;
         ro_arr = wr_arr;
@@ -295,6 +292,10 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
         // logical AND the precision met flag from all threads
         ret = MPI_Allreduce(&precision_met, &precision_met_all, 1, MPI_INT, \
                         MPI_LAND, MPI_COMM_WORLD);
+
+
+
+
         if (ret != 0) { // check return code
             printf("MPI Error. Code: %d (MPI_Allreduce)\n", ret);
             exit(1);
