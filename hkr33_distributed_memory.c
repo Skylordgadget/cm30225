@@ -242,6 +242,12 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                 printf("MPI Error. Code: %d (MPI_Recv)\n", ret);
                 exit(1);
             }   
+
+            ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
+            if (ret != 0) { // check return code
+                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
+                exit(1);
+            }   
         }
         if (rank != ROOT) {
             #ifdef DEBUG
@@ -258,22 +264,7 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                 printf("MPI Error. Code: %d (MPI_Recv)\n", ret);
                 exit(1);
             }  
-        }
 
-        if (rank != thread_lim-1) {
-            #ifdef DEBUG
-            if (verbose) printf("Rank %d waiting to send end_row\n", rank);
-            #endif
-            ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
-            if (ret != 0) { // check return code
-                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-                exit(1);
-            }   
-        }
-        if (rank != ROOT) {
-            #ifdef DEBUG
-            if (verbose) printf("Rank %d waiting to send start_row\n", rank);
-            #endif
             ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
             if (ret != 0) { // check return code
                 printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
