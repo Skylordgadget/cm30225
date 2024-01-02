@@ -137,8 +137,8 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
     int size_mutable = size - 2;
     int num_rows = end_row - start_row + 1;
     int i = 0;
-    MPI_Request start_request;
-    MPI_Request end_request;
+    // MPI_Request start_request;
+    // MPI_Request end_request;
     while (true) {
         #ifdef DEBUG
             // debug count of number of iterations thread 0 performs
@@ -192,9 +192,12 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                     }
                     #endif
                     // send top row to previous rank
-                    ret = MPI_Isend(&wr_arr[start_row * size], size, \
+                    // ret = MPI_Isend(&wr_arr[start_row * size], size, \
+                    //         MPI_DOUBLE, rank-1, rank*10 + (rank-1), \
+                    //         MPI_COMM_WORLD, &start_request);  
+                    ret = MPI_Send(&wr_arr[start_row * size], size, \
                             MPI_DOUBLE, rank-1, rank*10 + (rank-1), \
-                            MPI_COMM_WORLD, &start_request);  
+                            MPI_COMM_WORLD);  
                     if (ret != 0) { // check return code
                         printf("MPI Error. Code: %d (MPI_Isend)\n", ret);
                         exit(1);
@@ -211,9 +214,12 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                     }
                     #endif
                     // send bottom row to next rank
-                    ret = MPI_Isend(&wr_arr[end_row * size], size, \
+                    // ret = MPI_Isend(&wr_arr[end_row * size], size, \
+                    //         MPI_DOUBLE, rank+1, rank*10 + (rank+1), \
+                    //         MPI_COMM_WORLD, &end_request);  
+                    ret = MPI_Send(&wr_arr[end_row * size], size, \
                             MPI_DOUBLE, rank+1, rank*10 + (rank+1), \
-                            MPI_COMM_WORLD, &end_request);  
+                            MPI_COMM_WORLD);  
                     if (ret != 0) { // check return code 
                         printf("MPI Error. Code: %d (MPI_Isend)\n", ret);
                         exit(1);
@@ -222,26 +228,26 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             }
         } 
     
-        if (rank != thread_lim-1) {
-            #ifdef DEBUG
-            if (verbose) printf("Rank %d waiting to send end_row\n", rank);
-            #endif
-            ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
-            if (ret != 0) { // check return code
-                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-                exit(1);
-            }   
-        }
-        if (rank != ROOT) {
-            #ifdef DEBUG
-            if (verbose) printf("Rank %d waiting to send start_row\n", rank);
-            #endif
-            ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
-            if (ret != 0) { // check return code
-                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-                exit(1);
-            }  
-        }
+        // if (rank != thread_lim-1) {
+        //     #ifdef DEBUG
+        //     if (verbose) printf("Rank %d waiting to send end_row\n", rank);
+        //     #endif
+        //     ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
+        //     if (ret != 0) { // check return code
+        //         printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
+        //         exit(1);
+        //     }   
+        // }
+        // if (rank != ROOT) {
+        //     #ifdef DEBUG
+        //     if (verbose) printf("Rank %d waiting to send start_row\n", rank);
+        //     #endif
+        //     ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
+        //     if (ret != 0) { // check return code
+        //         printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
+        //         exit(1);
+        //     }  
+        // }
 
         /* Receive start and end rows of adjacent threads.
         This is a slow operation--likely dominating execution time for small 
