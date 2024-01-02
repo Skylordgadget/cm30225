@@ -222,6 +222,21 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             }
         } 
     
+        if (rank != thread_lim-1) {
+            ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
+            if (ret != 0) { // check return code
+                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
+                exit(1);
+            }   
+        }
+        if (rank != ROOT) {
+            ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
+            if (ret != 0) { // check return code
+                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
+                exit(1);
+            }  
+        }
+
         /* Receive start and end rows of adjacent threads.
         This is a slow operation--likely dominating execution time for small 
         array sizes */
@@ -234,12 +249,6 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             }
             #endif
             // receive bottom row + 1 from next rank 
-            ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
-            if (ret != 0) { // check return code
-                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-                exit(1);
-            }   
-
             ret = MPI_Recv(&wr_arr[(end_row+1) * size], size, MPI_DOUBLE, \
                     rank+1, (rank+1)*10 + rank, MPI_COMM_WORLD, &stat);
             if (ret != 0) { // check return code
@@ -256,12 +265,6 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
             }
             #endif
             // receive top row + 1 from previous rank
-            ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
-            if (ret != 0) { // check return code
-                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-                exit(1);
-            }  
-            
             ret = MPI_Recv(&wr_arr[(start_row-1) * size], size, MPI_DOUBLE, \
                     rank-1, (rank-1)*10 + rank, MPI_COMM_WORLD, &stat);
             if (ret != 0) { // check return code
