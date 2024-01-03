@@ -242,12 +242,8 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                 printf("MPI Error. Code: %d (MPI_Recv)\n", ret);
                 exit(1);
             }   
-
-            ret = MPI_Wait(&end_request, MPI_STATUSES_IGNORE);
-            if (ret != 0) { // check return code
-                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-                exit(1);
-            }   
+            // wait for the receive to complete
+            MPI_Wait(&end_request, MPI_STATUSES_IGNORE); 
         }
         if (rank != ROOT) {
             #ifdef DEBUG
@@ -264,12 +260,8 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
                 printf("MPI Error. Code: %d (MPI_Recv)\n", ret);
                 exit(1);
             }  
-
-            ret = MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
-            if (ret != 0) { // check return code
-                printf("MPI Error. Code: %d (MPI_Wait)\n", ret);
-                exit(1);
-            }  
+            // wait for the receive to complete
+            MPI_Wait(&start_request, MPI_STATUSES_IGNORE);
         }
 
         // flip pointers
@@ -283,9 +275,6 @@ double* avg(int rank, double* wr_arr, double* ro_arr, int start_row, \
         // logical AND the precision met flag from all threads
         ret = MPI_Allreduce(&precision_met, &precision_met_all, 1, MPI_INT, \
                         MPI_LAND, MPI_COMM_WORLD);
-
-
-
 
         if (ret != 0) { // check return code
             printf("MPI Error. Code: %d (MPI_Allreduce)\n", ret);
