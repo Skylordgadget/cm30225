@@ -255,7 +255,7 @@ int main (int argc, char **argv) {
 
 
     clock_gettime(CLOCK_REALTIME, &timer_start); // start timing code here
-    avg(old_arr, new_arr, size_mutable, precision);
+    avg(old_arr, new_arr, size_mutable, precision, verbose);
     clock_gettime(CLOCK_REALTIME, &timer_end); // stop timing code
     double time = (double)(timer_end.tv_sec - timer_start.tv_sec) 
                 + ((timer_end.tv_nsec - timer_start.tv_nsec)/1e+9);
