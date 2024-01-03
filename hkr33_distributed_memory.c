@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#define DEBUG // define to enable extra printed debug info
+#undef DEBUG // define to enable extra printed debug info
 #define ROOT 0 // MPI root process
 
 #ifdef _WIN32
@@ -326,14 +326,16 @@ int main(int argc, char** argv){
     double      precision = -1.0;
 
     char*       file_path=NULL;
+    char        out_path[255];
 
     bool        verbose = false;
     bool        print = false;
+    bool        output = false;
 
     char        mode = 'g';
     
     int opt;
-    while((opt = getopt(argc, argv, ":vam:p:s:t:f:")) != -1) 
+    while((opt = getopt(argc, argv, ":voam:p:s:t:f:")) != -1) 
     { 
         switch(opt) 
         { 
@@ -343,6 +345,9 @@ int main(int argc, char** argv){
             case 'a':
                 print = true;
                 break; 
+            case 'o':
+                output = true;
+                break;
             case 's': 
                 size = atoi(optarg);
                 break; 
@@ -556,8 +561,25 @@ int main(int argc, char** argv){
             }
         }
 
+        snprintf(out_path, sizeof(out_path), \
+                    ".%sout_%dt_%ds_%fp_%cm.txt", \
+                        SLASH, thread_lim, size, precision, mode);
+
+        if (output) {
+            if (verbose) printf("outputting to %s\n", out_path);
+            fpt = fopen(out_path, "w");
+            if (fpt == NULL) {
+                perror("fopen");
+            } else {
+                fprintf(fpt, "%d, %d, %f, %f\n", thread_lim, size, \
+                            slowest_time, precision);
+            }
+        }
+
         if (print) debug_display_array(res_arr, size);
     }
+    
+    
 
     free(wr_arr);
     free(ro_arr);
