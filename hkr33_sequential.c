@@ -75,6 +75,11 @@ double** debug_populate_array(double** arr, uint16_t size, char mode) {
                         arr[i][j] = 1.0;
                     else arr[i][j] = (double)(rand() % 10);
                     break;
+                case 'b': // 1s on the borders, 0s in the middle
+                    if (i == 0 || j == 0 || i == size-1 || j == size-1) 
+                        arr[i * size + j] = 1.0;
+                    else arr[i * size + j] = 0.0;
+                    break;
                 default: // 0s everywhere
                     printf("mode %c unrecognised", mode);
                     exit(1);
