@@ -243,8 +243,8 @@ int main (int argc, char **argv) {
     }
 
     snprintf(out_path, sizeof(out_path), \
-                "..%sout%sres_seq_%ds_%fp_%c.txt", \
-                    SLASH, SLASH, size, precision, mode);
+                ".%sres_seq_%ds_%fp_%c.txt", \
+                    SLASH, size, precision, mode);
 
     printf("mode %c\n", mode);
 
